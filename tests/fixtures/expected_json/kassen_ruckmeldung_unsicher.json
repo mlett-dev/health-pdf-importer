@@ -1,0 +1,13 @@
+{
+  "document_type": {"value": "krankenkasse_antwort", "confidence": 0.90, "evidence": "Bescheid"},
+  "patient_first_name": {"value": "Max", "confidence": 0.99, "evidence": "Patient: Max"},
+  "aufwendungsbetrag_eur": {"value": 200.00, "confidence": 0.95, "evidence": "Rechnungsbetrag: 200,00 EUR"},
+  "erstattungsbetrag_eur": {"value": 170.00, "confidence": 0.85, "evidence": "Erstattungsbetrag: 170,00 EUR"},
+  "bescheids_datum": {"value": "2026-05-01", "confidence": 0.97, "evidence": "Bescheidsdatum: 01.05.2026"},
+  "betreffender_termin": {"value": null, "confidence": 0.0},
+  "doctor_name": {"value": null, "confidence": 0.0},
+  "aktenzeichen": {"value": null, "confidence": 0.0},
+  "rechnungsnummer": {"value": null, "confidence": 0.0},
+  "warnings": ["multiple_amounts_detected"],
+  "missing_fields": []
+}

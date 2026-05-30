@@ -1,0 +1,22 @@
+[Unit]
+Description=Health PDF Importer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=health-importer
+Group=health-importer
+WorkingDirectory=/opt/health-pdf-importer
+Environment=HEALTH_IMPORTER_CONFIG=/etc/health-pdf-importer/app.yaml
+Environment=HEALTH_IMPORTER_INTERVAL_SECONDS=30
+Environment=HEALTH_IMPORTER_WAIT_SECONDS=2
+EnvironmentFile=-/etc/health-pdf-importer/health-pdf-importer.env
+ExecStart=/opt/health-pdf-importer/.venv/bin/health-importer --config ${HEALTH_IMPORTER_CONFIG} watch --interval-seconds ${HEALTH_IMPORTER_INTERVAL_SECONDS} --wait-seconds ${HEALTH_IMPORTER_WAIT_SECONDS}
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

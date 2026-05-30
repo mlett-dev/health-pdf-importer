@@ -1,0 +1,185 @@
+folders:
+  inbox: data/inbox
+  processing: data/processing
+  done: data/done
+  review: data/review
+  error: data/error
+
+file_naming:
+  # Verfuegbare Platzhalter:
+  #   {date}              -> Rechnungsdatum (z.B. 2026_04_15)
+  #   {patient}           -> Patienten-Vorname (z.B. Max)
+  #   {topic}             -> Rechnungs-Thema (z.B. Arztbesuch)
+  #   {doctor}            -> Voller Arztname inkl. Titel (z.B. Dr._Testarzt)
+  #   {doctor_last_name}  -> Arzt-Nachname ohne Titel (z.B. Testarzt)
+  #   {total_amount_eur}  -> Gesamtbetrag als "123,45"
+  pattern: "{date}_{patient}_{topic}.pdf"
+  date_format: "%Y_%m_%d"
+  max_topic_length: 60
+
+ollama:
+  base_url: http://127.0.0.1:11434
+  text_model: qwen3.6:35b-a3b-q8_0
+  vision_model: qwen3.6:35b-a3b-q8_0
+  timeout_seconds: 300
+
+pdf:
+  min_text_chars: 500
+  ocr_language: deu+eng
+  render_dpi: 220
+  max_vision_pages: 3
+  min_area_ratio: 0.01
+  min_pixel_width: 80
+  min_pixel_height: 40
+
+confidence:
+  auto_create_min: 0.85
+  review_min: 0.60
+  required_fields_min: 0.80
+
+anytype:
+  # NEVER commit your real config/app.yaml. Copy this file and fill in your values.
+  space_id: "<your-space-id>"
+  collection_name: "Wahlarzt Rechnungen"
+  collection_id: "<your-collection-id>"
+  custom_type_name: "Wahlarztrechnung"
+  custom_type_key: wahlarztrechnung
+  gkk_property_id: "<your-gkk-property-id>"
+  pkv_property_id: "<your-pkv-property-id>"
+  pkv_eingereicht_property_id: "<your-pkv-eingereicht-property-id>"
+  attachment_property_id: "<your-attachment-property-id>"
+  done_property_id: "<your-done-property-id>"
+  patient_tag_property_id: "<your-patient-tag-property-id>"
+  amount_property_id: "<your-amount-property-id>"
+  date_property_id: "<your-date-property-id>"
+  doctor_property_id: "<your-doctor-property-id>"
+  extension_command: anytype-extension-mcp-wrapper
+  patients:
+    - name: Max
+      tag: "<your-max-tag-id>"
+      aliases:
+        - Maximilian
+    - name: Anna
+      tag: "<your-anna-tag-id>"
+  # change to false for production
+  dry_run: true 
+
+logging:
+  level: INFO
+  trace_full_text: false
+
+privacy:
+  store_extracted_text: false
+  store_full_text_debug: false
+  write_sidecar_json: true
+  sidecar_policy: always
+  allow_external_services: false
+
+state_db:
+  path: data/state.sqlite
+
+# Optional: Kassen-PDF Namensschema (default: enabled mit Pattern {date}_{patient}_GKK_{topic}.pdf)
+# Verfuegbare Platzhalter:
+#   {date}              -> Bescheidsdatum (z.B. 2026_04_15)
+#   {service_date}      -> Leistungsdatum / betreffender Termin (z.B. 2026_04_08)
+#   {patient}           -> Patienten-Vorname (z.B. Max)
+#   {topic}             -> Thema der zugehoerigen Rechnung (aus Anytype-Objektname des Matches; Fallback: Arztname)
+#   {doctor}            -> Voller Arztname inkl. Titel (z.B. Dr._Testarzt)
+#   {doctor_last_name}  -> Arzt-Nachname ohne Titel (z.B. Testarzt)
+#   {total_amount_eur}  -> Erstattungsbetrag als "123,45"
+# kassen_file_naming:
+#   enabled: true
+#   pattern: "{date}_{patient}_GKK_{topic}.pdf"
+#   date_format: "%Y_%m_%d"
+#   max_topic_length: 40
+
+# Optional: Pkv-PDF Namensschema (default: enabled mit Pattern {date}_{patient}_PKV.pdf)
+# Verfuegbare Platzhalter:
+#   {date}              -> Bescheidsdatum (z.B. 2026_04_15)
+#   {service_date}      -> Leistungsdatum / betreffender Termin (z.B. 2026_04_08)
+#   {patient}           -> Patienten-Vorname (z.B. Max)
+#   {topic}             -> Thema der zugehoerigen Rechnung (aus Anytype-Objektname des Matches; Fallback: Arztname)
+#   {doctor}            -> Voller Arztname inkl. Titel (z.B. Dr._Testarzt)
+#   {doctor_last_name}  -> Arzt-Nachname ohne Titel (z.B. Testarzt)
+#   {total_amount_eur}  -> Erstattungsbetrag als "123,45"
+# pkv_file_naming:
+#   enabled: true
+#   pattern: "{date}_{patient}_PKV_{topic}.pdf"
+#   date_format: "%Y_%m_%d"
+#   max_topic_length: 40
+
+# Optional: Kassen-Matching Thresholds (default: auto_match_min=0.90, review_match_min=0.60)
+# kassen_match:
+#   auto_match_min: 0.90
+#   review_match_min: 0.60
+
+# Optional: GMX Email Daten für echten IMAP-Draft
+#email:
+#  enabled: true
+#  provider: gmx
+#  draft_folder: review/drafts
+#  pkv_recipient: pkv-service@example.invalid
+#  # Verfuegbare Platzhalter im Betreff:
+#  #   {patient}  -> Patienten-Vorname
+#  #   {date}     -> Bescheidsdatum (dd.mm.yyyy)
+#  pkv_subject_template: "Einreichung Wahlarztrechnung — {patient} — {date}"
+#  # Verfuegbare Platzhalter im Body:
+#  #   {patient}                -> Patienten-Vorname
+#  #   {date}                   -> Bescheidsdatum (dd.mm.yyyy)
+#  #   {details}                -> Auto-gebauter Details-Block
+#  #   {erstattungsbetrag}      -> Erstattungsbetrag als "123,45"
+#  #   {aktenzeichen}           -> Aktenzeichen (oder "")
+#  #   {rechnungsnummer}        -> Rechnungsnummer (oder "")
+#  #   {termin}                 -> Betreffender Termin (oder "")
+#  #   {rechnungsname}          -> Name der zugehoerigen Rechnung (oder "")
+#  #   {sender_name}            -> Absender-Name
+#  #   {sender_policy_number}   -> Polizzennummer
+#  #   {recipient}              -> Pkv-Empfaenger-Mail
+#  pkv_body_template: |
+#    Sehr geehrtes Pkv Team,
+#
+#    ich ersuche um Rueckerstattung der Arztkosten gemaess beiliegender Honorarnoten.
+#    {details}
+#
+#    Vielen Dank im Voraus.
+#
+#    Mit freundlichen Gruessen,
+#    {sender_name}
+#    Polizzennummer: {sender_policy_number}
+#  pkv_sender_name: Max Mustermann
+#  pkv_sender_policy_number: "1234567TEST"
+#  imap_host: imap.gmx.net
+#  imap_port: 993
+#  imap_username: deine@gmx.de
+#  imap_password_env_key: GMX_PASSWORD
+#  # Optional: IMAP-spezifische Draft-Ordner und Absenderadresse
+#  # imap_draft_folder_name: Entwuerfe
+#  # imap_from_addr: deine@gmx.de
+
+# Optional: GMAIL Email Daten für echten IMAP-Draft
+#email:
+#  enabled: true
+#  provider: gmail
+#  draft_folder: review/drafts
+#  pkv_recipient: pkv-service@example.invalid
+#  pkv_subject_template: "Einreichung Wahlarztrechnung — {patient} — {date}"
+#  pkv_body_template: |
+#    Sehr geehrtes Pkv Team,
+#
+#    ich ersuche um Rueckerstattung der Arztkosten gemaess beiliegender Honorarnoten.
+#    {details}
+#
+#    Vielen Dank im Voraus.
+#
+#    Mit freundlichen Gruessen,
+#    {sender_name}
+#    Polizzennummer: {sender_policy_number}
+#  pkv_sender_name: Max Mustermann
+#  pkv_sender_policy_number: "1234567TEST"
+#  imap_host: imap.gmail.com
+#  imap_port: 993
+#  imap_username: dein@gmail.com
+#  imap_password_env_key: GMAIL_PASSWORD
+#  # Optional: IMAP-spezifische Draft-Ordner und Absenderadresse
+#  # imap_draft_folder_name: "[Gmail]/Entwuerfe"
+#  # imap_from_addr: dein@gmail.com

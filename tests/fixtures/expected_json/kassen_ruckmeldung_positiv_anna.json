@@ -1,0 +1,11 @@
+{
+  "document_type": {"value": "krankenkasse_antwort", "confidence": 0.93, "evidence": "Rechnungsbearbeitung"},
+  "patient_first_name": {"value": "Anna", "confidence": 0.99, "evidence": "Patient: Anna"},
+  "erstattungsbetrag_eur": {"value": 120.00, "confidence": 0.98, "evidence": "Erstattungsbetrag: 120,00 EUR"},
+  "bescheids_datum": {"value": "2026-05-05", "confidence": 0.97, "evidence": "Bescheidsdatum: 05.05.2026"},
+  "aufwendungsbetrag_eur": {"value": null, "confidence": 0.0},
+  "betreffender_termin": {"value": "2026-03-22", "confidence": 0.90, "evidence": "Unterlagen vom 22.03.2026"},
+  "doctor_name": {"value": "Dr. Testarzt B", "confidence": 0.95, "evidence": "Arzt: Dr. Testarzt B"},
+  "aktenzeichen": {"value": null, "confidence": 0.0},
+  "rechnungsnummer": {"value": null, "confidence": 0.0}
+}

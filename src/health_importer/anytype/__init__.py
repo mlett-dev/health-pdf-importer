@@ -1,0 +1,2 @@
+"""Stable Anytype integration boundary."""
+

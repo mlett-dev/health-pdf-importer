@@ -1,0 +1,17 @@
+.coverage
+coverage.xml
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.env
+config/app.yaml
+config/app.yaml.bak
+data/
+done/
+review/
+error/
+processing/
+docs/impl/
