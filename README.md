@@ -55,6 +55,20 @@ write sidecars, and route files to `done/` or `review/`.
 > documents. Read the [operations checklist](docs/operations.md#production-use)
 > before using `--no-dry-run`.
 
+## Observed results (personal workflow)
+
+Initial personal validation set. This is a private, local-first workflow, **not** a clinical or
+regulatory validation, and the sample is small — read the metrics accordingly.
+
+| Metric | Observed value |
+|---|---|
+| Validation set | 20 real healthcare documents |
+| Extraction quality | No extraction errors observed on this set (100% on the initial 20-document set) |
+| Hands-on effort | Reduced from ~30 min to ~1 min per document |
+| Unattended pipeline time | ~3 min per document end to end |
+| Local model | `qwen3.6:35b-a3b-q8_0` via Ollama |
+| Privacy default | No external LLM/OCR APIs by default; everything runs locally |
+
 ## Installation
 
 ### Requirements
