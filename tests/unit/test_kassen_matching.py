@@ -107,6 +107,45 @@ def test_score_match_candidates_with_resolved_doctor_name() -> None:
     assert any("doctor_fuzzy:1.00" in r for r in scored[0].match_reasons)
 
 
+def test_score_match_candidates_ignores_rechnungsnummer_when_not_configured() -> None:
+    obj_ref = MagicMock()
+    obj_ref.id = "inv-1"
+    obj_ref.name = "Augenuntersuchung"
+
+    object_properties = {
+        "inv-1": {
+            "test-patient-tag-id": {"value": [{"name": "Anna"}]},
+            "test-date-id": {"value": "2026-03-25T00:00:00Z"},
+            "test-amount-id": {"value": 200},
+            "__resolved_doctor_name__": "Testarzt Alpha",
+            "some-title": {"text": "Augenuntersuchung"},
+        },
+    }
+
+    kassen = ValidatedKassenRuckmeldung(
+        patient_first_name="Anna",
+        doctor_name="Dr. Testarzt Alpha",
+        bescheids_datum=date(2026, 4, 15),
+        aufwendungsbetrag_eur=Decimal("200.00"),
+        erstattungsbetrag_eur=Decimal("31.59"),
+        rechnungsnummer="R-2026-001",
+        aktenzeichen=None,
+        betreffender_termin=date(2026, 3, 25),
+    )
+
+    mock_config = MagicMock()
+    mock_config.patient_tag_property_id = "test-patient-tag-id"
+    mock_config.amount_property_id = "test-amount-id"
+    mock_config.date_property_id = "test-date-id"
+    mock_config.attachment_property_id = "rechnung,_gkk"
+
+    scored = score_match_candidates([obj_ref], kassen, object_properties, mock_config)
+
+    assert scored[0].score == 1.0
+    assert "rechnungsnummer_not_configured" in scored[0].match_reasons
+    assert "rechnungsnummer_mismatch" not in scored[0].match_reasons
+
+
 def test_find_invoice_candidates_injects_resolved_doctor_names() -> None:
     """find_invoice_candidates resolves doctor names into properties."""
     mock_runner = MagicMock()

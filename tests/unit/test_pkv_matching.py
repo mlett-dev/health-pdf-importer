@@ -78,6 +78,28 @@ def test_compute_pkv_score_with_rechnungsnummer() -> None:
     assert any("rechnungsnummer_exact" in r for r in reasons)
 
 
+def test_compute_pkv_score_ignores_rechnungsnummer_when_not_configured() -> None:
+    props = {
+        "test-patient-tag-id": {"multi_select": ["Luna"]},
+        "test-amount-id": {"value": "120"},
+        "test-date-id": {"date": "2026-05-08"},
+        "some-title": {"text": "Kontrolle von Wachstum"},
+    }
+
+    score, reasons = _compute_pkv_score(
+        props,
+        "Luna",
+        "120",
+        date(2026, 5, 8),
+        "R-2026-001",
+        _config(),
+    )
+
+    assert score == 1.0
+    assert "rechnungsnummer_not_configured" in reasons
+    assert "rechnungsnummer_mismatch" not in reasons
+
+
 def test_score_pkv_candidates_sorts_descending() -> None:
     """Candidates should be sorted by descending score."""
     obj1 = MagicMock()

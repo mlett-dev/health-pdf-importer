@@ -127,15 +127,18 @@ def _compute_pkv_score(
 
     # Rechnungsnummer (very high weight, only if present)
     if rechnungsnummer:
-        doc_rechnungsnr = _get_string_prop(props, "rechnungsnummer")
-        if doc_rechnungsnr and _normalize_for_match(doc_rechnungsnr) == _normalize_for_match(
-            rechnungsnummer
-        ):
-            scores.append((1.5, 1.0))
-            reasons.append(f"rechnungsnummer_exact:{rechnungsnummer}")
+        if "rechnungsnummer" not in props:
+            reasons.append("rechnungsnummer_not_configured")
+        elif doc_rechnungsnr := _get_direct_string_prop(props, "rechnungsnummer"):
+            if _normalize_for_match(doc_rechnungsnr) == _normalize_for_match(rechnungsnummer):
+                scores.append((1.5, 1.0))
+                reasons.append(f"rechnungsnummer_exact:{rechnungsnummer}")
+            else:
+                scores.append((1.5, 0.0))
+                reasons.append("rechnungsnummer_mismatch")
         else:
             scores.append((1.5, 0.0))
-            reasons.append("rechnungsnummer_mismatch")
+            reasons.append("rechnungsnummer_missing_in_invoice")
 
     # Compute weighted average
     total_weight = sum(w for w, _ in scores)
@@ -185,6 +188,20 @@ def _get_string_prop(props: dict, key: str) -> str | None:
                         return str(val)
         elif isinstance(prop_value, str):
             return prop_value
+    return None
+
+
+def _get_direct_string_prop(props: dict, key: str) -> str | None:
+    prop_value = props.get(key)
+    if isinstance(prop_value, dict):
+        value = prop_value.get("value")
+        if value is not None:
+            return str(value)
+        for sub_key in ("text", "name", "string", "title"):
+            if sub_key in prop_value and prop_value[sub_key] is not None:
+                return str(prop_value[sub_key])
+    elif prop_value is not None:
+        return str(prop_value)
     return None
 
 
