@@ -2,7 +2,9 @@ from pathlib import Path
 
 from health_importer.ai.extractors import (
     consolidate_vision_pages,
+    extract_kassen_ruckmeldung_from_vision_pages,
     extract_invoice_from_vision_pages,
+    extract_pkv_antwort_from_vision_pages,
     verify_invoice_values_vision,
 )
 from health_importer.ai.schemas import VisionPageExtraction
@@ -41,6 +43,85 @@ def test_extract_invoice_from_vision_pages_validates_page_json(monkeypatch, tmp_
 
     assert results[0].patient_first_name.value == "Max"
     assert results[0].page_number == 1
+
+
+def test_extract_kassen_ruckmeldung_from_vision_pages_validates_json(
+    monkeypatch, tmp_path: Path
+) -> None:
+    image = tmp_path / "page.png"
+    image.write_bytes(b"png")
+    monkeypatch.setattr(
+        "health_importer.ai.extractors.OllamaVisionClient",
+        _vision_client(
+            [
+                """
+                {
+                  "document_type": {"value": "krankenkasse_antwort", "confidence": 0.9, "evidence": "Bescheid", "page": 1},
+                  "patient_first_name": {"value": "Max", "confidence": 0.9, "evidence": "Max", "page": 1},
+                  "doctor_name": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
+                  "bescheids_datum": {"value": "2026-05-10", "confidence": 0.9, "evidence": "10.05.2026", "page": 1},
+                  "aufwendungsbetrag_eur": {"value": 120.0, "confidence": 0.8, "evidence": "120,00", "page": 1},
+                  "erstattungsbetrag_eur": {"value": 42.5, "confidence": 0.9, "evidence": "42,50", "page": 1},
+                  "rechnungsnummer": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
+                  "aktenzeichen": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
+                  "betreffender_termin": {"value": "2026-05-08", "confidence": 0.8, "evidence": "08.05.2026", "page": 1},
+                  "warnings": [],
+                  "missing_fields": []
+                }
+                """
+            ]
+        ),
+    )
+
+    extraction = extract_kassen_ruckmeldung_from_vision_pages(
+        [(1, image)],
+        model="qwen3.6:35b-a3b-q8_0",
+        base_url="http://127.0.0.1:11434",
+        timeout_seconds=30,
+    )
+
+    assert extraction.document_type.value == "krankenkasse_antwort"
+    assert extraction.patient_first_name.value == "Max"
+    assert extraction.erstattungsbetrag_eur.value == 42.5
+
+
+def test_extract_pkv_antwort_from_vision_pages_validates_json(
+    monkeypatch, tmp_path: Path
+) -> None:
+    image = tmp_path / "page.png"
+    image.write_bytes(b"png")
+    monkeypatch.setattr(
+        "health_importer.ai.extractors.OllamaVisionClient",
+        _vision_client(
+            [
+                """
+                {
+                  "document_type": {"value": "pkv_antwort", "confidence": 0.9, "evidence": "Pkv", "page": 1},
+                  "patient_first_name": {"value": "Max", "confidence": 0.9, "evidence": "Max", "page": 1},
+                  "doctor_name": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
+                  "erstattungsbetrag_eur": {"value": 42.5, "confidence": 0.9, "evidence": "42,50", "page": 1},
+                  "bescheids_datum": {"value": "2026-05-10", "confidence": 0.9, "evidence": "10.05.2026", "page": 1},
+                  "aufwendungsbetrag_eur": {"value": 120.0, "confidence": 0.8, "evidence": "120,00", "page": 1},
+                  "rechnungsnummer": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
+                  "betreffender_termin": {"value": "2026-05-08", "confidence": 0.8, "evidence": "08.05.2026", "page": 1},
+                  "warnings": [],
+                  "missing_fields": []
+                }
+                """
+            ]
+        ),
+    )
+
+    extraction = extract_pkv_antwort_from_vision_pages(
+        [(1, image)],
+        model="qwen3.6:35b-a3b-q8_0",
+        base_url="http://127.0.0.1:11434",
+        timeout_seconds=30,
+    )
+
+    assert extraction.document_type.value == "pkv_antwort"
+    assert extraction.patient_first_name.value == "Max"
+    assert extraction.erstattungsbetrag_eur.value == 42.5
 
 
 def test_consolidate_vision_pages_chooses_highest_confidence_values() -> None:

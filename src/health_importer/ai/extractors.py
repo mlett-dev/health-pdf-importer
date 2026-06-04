@@ -143,6 +143,50 @@ def extract_pkv_antwort_from_text(
     raise ExtractionError(f"Pkv extraction failed: {last_error}") from last_error
 
 
+def extract_kassen_ruckmeldung_from_vision_pages(
+    images: list[tuple[int, Path]],
+    *,
+    model: str,
+    base_url: str,
+    timeout_seconds: int,
+) -> KassenRuckmeldungExtraction:
+    prompt = load_prompt("extract_kassen_ruckmeldung_vision.md")
+    image_paths = [image_path for _page_number, image_path in images]
+    client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
+    response = client.chat_with_images(
+        image_paths,
+        prompt,
+        response_format=KassenRuckmeldungExtraction.model_json_schema(),
+        num_predict=2048,
+    )
+    try:
+        return KassenRuckmeldungExtraction.model_validate(_loads_json_object(response))
+    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+        raise ExtractionError(f"Kassen vision extraction failed: {exc}") from exc
+
+
+def extract_pkv_antwort_from_vision_pages(
+    images: list[tuple[int, Path]],
+    *,
+    model: str,
+    base_url: str,
+    timeout_seconds: int,
+) -> PkvAntwortExtraction:
+    prompt = load_prompt("extract_pkv_antwort_vision.md")
+    image_paths = [image_path for _page_number, image_path in images]
+    client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
+    response = client.chat_with_images(
+        image_paths,
+        prompt,
+        response_format=PkvAntwortExtraction.model_json_schema(),
+        num_predict=2048,
+    )
+    try:
+        return PkvAntwortExtraction.model_validate(_loads_json_object(response))
+    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+        raise ExtractionError(f"Pkv vision extraction failed: {exc}") from exc
+
+
 def extract_invoice_from_vision_pages(
     images: list[tuple[int, Path]],
     *,

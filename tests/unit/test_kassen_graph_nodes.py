@@ -1,11 +1,16 @@
 """Regression tests for uncovered Kassen graph nodes."""
 
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 from health_importer.anytype.client import AnytypeOperationError
 from health_importer.graph.anytype_update_nodes import update_kassen_anytype
-from health_importer.graph.nodes import decide_kassen_match, match_kassen_invoice
+from health_importer.graph.nodes import (
+    decide_kassen_match,
+    extract_kassen_ruckmeldung,
+    match_kassen_invoice,
+)
 from health_importer.graph.state import GraphState
 
 
@@ -82,6 +87,47 @@ def test_decide_kassen_match_unclear() -> None:
     result = decide_kassen_match(state)
     assert cast(Any, result).get("next_route") == "kassen_review_unclear"
     assert result["status"] == "KASSEN_REVIEW_UNCLEAR"
+
+
+def test_extract_kassen_ruckmeldung_uses_vision_when_invoice_extraction_used_vision(
+    monkeypatch,
+) -> None:
+    class FakeExtraction:
+        def model_dump(self, mode):
+            assert mode == "json"
+            return {"patient_first_name": {"value": "Anna"}}
+
+    def fail_text_extract(*args, **kwargs):
+        raise AssertionError("text extractor should not be used")
+
+    def fake_vision_extract(images, **kwargs):
+        assert images == [(1, Path("/tmp/page.png"))]
+        return FakeExtraction()
+
+    monkeypatch.setattr(
+        "health_importer.graph.kassen_nodes.extract_kassen_ruckmeldung_from_text",
+        fail_text_extract,
+    )
+    monkeypatch.setattr(
+        "health_importer.graph.kassen_nodes.extract_kassen_ruckmeldung_from_vision_pages",
+        fake_vision_extract,
+    )
+    state = cast(
+        GraphState,
+        {
+            "pdf_text": {"pages": [{"page_number": 1, "text": ""}]},
+            "extraction_method": "vision",
+            "vision_pages": [{"page_number": 1, "path": "/tmp/page.png"}],
+            "events": [],
+        },
+    )
+
+    result = extract_kassen_ruckmeldung(state)
+
+    assert result["status"] == "KASSEN_EXTRACTED"
+    assert result["events"][-1]["message"] == "Extracted Kassenrückmeldung data using vision."
+    extraction = cast(Any, result)["kassen_ruckmeldung_extraction"]
+    assert extraction["patient_first_name"]["value"] == "Anna"
 
 
 def test_update_kassen_anytype_no_match() -> None:

@@ -4,7 +4,10 @@ import logging
 import traceback
 from pathlib import Path
 
-from health_importer.ai.extractors import extract_pkv_antwort_from_text
+from health_importer.ai.extractors import (
+    extract_pkv_antwort_from_text,
+    extract_pkv_antwort_from_vision_pages,
+)
 from health_importer.ai.schemas import PkvAntwortExtraction
 from health_importer.anytype.client import build_anytype_client
 from health_importer.anytype.kassen_matching import find_invoice_candidates
@@ -34,6 +37,7 @@ from health_importer.graph.state import (
     get_done_folder,
     get_error_folder,
     get_events,
+    get_extraction_method,
     get_file_id,
     get_file_name,
     get_matching_candidates,
@@ -53,6 +57,7 @@ from health_importer.graph.state import (
     get_status,
     get_validation,
     get_vision_model,
+    get_vision_pages,
     get_write_sidecar_json,
 )
 from health_importer.graph.state_helpers import (
@@ -77,19 +82,35 @@ logger = logging.getLogger(__name__)
 
 def extract_pkv_antwort(state: GraphState) -> GraphState:
     """Extract structured data from a Pkv-Antwort PDF."""
-    source_text = source_text_dict(state)
-    extraction = extract_pkv_antwort_from_text(
-        source_text,
-        model=str(state.get("text_model", get_vision_model(state))),
-        base_url=str(get_ollama_base_url(state)),
-        timeout_seconds=int(get_ollama_timeout_seconds(state)),
-    )
+    vision_pages = get_vision_pages(state) or []
+    if str(get_extraction_method(state)).startswith("vision") and vision_pages:
+        images = [(int(page["page_number"]), Path(str(page["path"]))) for page in vision_pages]
+        extraction = extract_pkv_antwort_from_vision_pages(
+            images,
+            model=str(state.get("vision_model", get_vision_model(state))),
+            base_url=str(get_ollama_base_url(state)),
+            timeout_seconds=int(get_ollama_timeout_seconds(state)),
+        )
+        method = "vision"
+    else:
+        source_text = source_text_dict(state)
+        extraction = extract_pkv_antwort_from_text(
+            source_text,
+            model=str(state.get("text_model", get_vision_model(state))),
+            base_url=str(get_ollama_base_url(state)),
+            timeout_seconds=int(get_ollama_timeout_seconds(state)),
+        )
+        method = "text"
 
     next_state = copy_state(state)
     next_state[STATE_PKV_ANTWORT_EXTRACTION] = extraction.model_dump(mode="json")
     next_state[STATE_STATUS] = "PKV_EXTRACTED"
     next_state[STATE_EVENTS].append(
-        event("extract_pkv_antwort", "PKV_EXTRACTED", "Extracted Pkv-Antwort data.")
+        event(
+            "extract_pkv_antwort",
+            "PKV_EXTRACTED",
+            f"Extracted Pkv-Antwort data using {method}.",
+        )
     )
     return next_state
 

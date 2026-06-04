@@ -2,6 +2,7 @@
 
 import json
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
@@ -328,6 +329,45 @@ def test_extract_pkv_antwort_node(monkeypatch) -> None:
     pkv_extraction = cast(Any, result).get("pkv_antwort_extraction")
     assert pkv_extraction is not None
     assert pkv_extraction["patient_first_name"]["value"] == "Max"
+
+
+def test_extract_pkv_antwort_node_uses_vision_when_invoice_extraction_used_vision(
+    monkeypatch,
+) -> None:
+    class FakeExtraction:
+        def model_dump(self, mode):
+            assert mode == "json"
+            return {"patient_first_name": {"value": "Anna"}}
+
+    def fail_text_extract(*args, **kwargs):
+        raise AssertionError("text extractor should not be used")
+
+    def fake_vision_extract(images, **kwargs):
+        assert images == [(1, Path("/tmp/page.png"))]
+        return FakeExtraction()
+
+    monkeypatch.setattr(
+        "health_importer.graph.pkv_nodes.extract_pkv_antwort_from_text", fail_text_extract
+    )
+    monkeypatch.setattr(
+        "health_importer.graph.pkv_nodes.extract_pkv_antwort_from_vision_pages",
+        fake_vision_extract,
+    )
+    state = cast(
+        GraphState,
+        {
+            "pdf_text": {"pages": [{"page_number": 1, "text": ""}]},
+            "extraction_method": "vision",
+            "vision_pages": [{"page_number": 1, "path": "/tmp/page.png"}],
+            "events": [],
+        },
+    )
+
+    result = extract_pkv_antwort(state)
+
+    assert result["status"] == "PKV_EXTRACTED"
+    assert result["events"][-1]["message"] == "Extracted Pkv-Antwort data using vision."
+    assert cast(Any, result)["pkv_antwort_extraction"]["patient_first_name"]["value"] == "Anna"
 
 
 def test_validate_pkv_antwort_node_invalid_goes_to_failed() -> None:
