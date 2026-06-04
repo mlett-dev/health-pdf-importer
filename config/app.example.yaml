@@ -108,6 +108,13 @@ state_db:
 #   date_format: "%Y_%m_%d"
 #   max_topic_length: 40
 
+# Optional: Namen privater Krankenversicherer als Hinweis fuer die document_type-Erkennung
+# pkv_insurers:
+#   names:
+#     - Uniqua
+#     - Donau
+#     - Merkur
+
 # Optional: Kassen-Matching Thresholds (default: auto_match_min=0.90, review_match_min=0.60)
 # kassen_match:
 #   auto_match_min: 0.90

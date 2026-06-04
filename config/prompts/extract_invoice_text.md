@@ -36,7 +36,7 @@ Regeln für `document_type`:
 
 - `honorarnote` — Arztrechnung mit Gesamtbetrag, Patient, Behandlungstermin. Enthält typischerweise "Honorarnote", "Rechnung", Arztkontakt.
 - `krankenkasse_antwort` — Bescheid/Rückmeldung einer Krankenkasse (GKK). Enthält typischerweise "Bescheid", "Erstattung", "Kostenübernahme", einen Erstattungsbetrag und ein Bescheidsdatum. Keine neue Rechnung.
-- `pkv_antwort` — Bescheid einer privaten Krankenversicherung (Pkv). Ähnlich wie Kassenrückmeldung, aber von privater Versicherung. Enthält typischerweise "Erstattungsbescheid", "Pkv", "privat".
+- `pkv_antwort` — Bescheid einer privaten Krankenversicherung (Pkv). Ähnlich wie Kassenrückmeldung, aber von privater Versicherung. Enthält typischerweise "Erstattungsbescheid", "Pkv", "privat", "Polizzennummer". Typische private Versicherer/Namenshinweise: {{pkv_insurer_names}}.
 - `ueberweisung` — Überweisungsschein vom Arzt zu einem anderen Arzt.
 - `befund` — Medizinischer Befundbericht ohne Rechnungsbetrag.
 - `sonstiges` — Alles andere, was in keine Kategorie passt.

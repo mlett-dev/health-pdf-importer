@@ -26,6 +26,7 @@ from health_importer.graph.state import (
     STATE_KASSEN_MATCH_AUTO_MIN,
     STATE_KASSEN_MATCH_REVIEW_MIN,
     STATE_PKV_FILE_NAMING,
+    STATE_PKV_INSURER_NAMES,
     STATE_REVIEW_FOLDER,
     STATE_STATE_DB_PATH,
     STATE_STATUS,
@@ -57,6 +58,7 @@ def run_once(
     ollama_timeout_seconds: int = 300,
     verify_extraction_enabled: bool = True,
     allowed_patients: tuple[str, ...] = ("Max", "Anna"),
+    pkv_insurer_names: tuple[str, ...] = ("Uniqua", "Donau", "Merkur"),
     required_confidence_min: float = 0.8,
     max_amount_eur: str = "5000",
     file_naming: FileNamingConfig | None = None,
@@ -106,6 +108,7 @@ def run_once(
         "ollama_timeout_seconds": ollama_timeout_seconds,
         "verify_extraction_enabled": verify_extraction_enabled,
         "allowed_patients": allowed_patients,
+        "pkv_insurer_names": pkv_insurer_names,
         "required_confidence_min": required_confidence_min,
         "max_amount_eur": max_amount_eur,
         "max_topic_length": file_naming.max_topic_length,
@@ -148,6 +151,7 @@ def run_once(
             "date_format": pkv_file_naming.date_format,
             "max_topic_length": pkv_file_naming.max_topic_length,
         }
+    initial_state[STATE_PKV_INSURER_NAMES] = pkv_insurer_names
     if kassen_match is not None:
         initial_state[STATE_KASSEN_MATCH_AUTO_MIN] = kassen_match.auto_match_min
         initial_state[STATE_KASSEN_MATCH_REVIEW_MIN] = kassen_match.review_match_min

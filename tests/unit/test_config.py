@@ -52,6 +52,44 @@ def test_load_example_config(tmp_path: Path) -> None:
     assert config.privacy.allow_external_services is False
     assert config.privacy.sidecar_policy == "always"
     assert config.logging.trace_full_text is False
+    assert config.pkv_insurers.names == ("Uniqua", "Donau", "Merkur")
+
+
+def test_pkv_insurers_names_can_be_configured(tmp_path: Path) -> None:
+    config_path = tmp_path / "app.yaml"
+    config_text = Path("config/app.example.yaml").read_text(encoding="utf-8")
+    config_path.write_text(
+        _replace_placeholders(config_text)
+        + """
+pkv_insurers:
+  names:
+    - Allianz
+    - Wiener Staedtische
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.pkv_insurers.names == ("Allianz", "Wiener Staedtische")
+
+
+def test_pkv_insurers_names_reject_invalid_entries(tmp_path: Path) -> None:
+    config_path = tmp_path / "app.yaml"
+    config_text = Path("config/app.example.yaml").read_text(encoding="utf-8")
+    config_path.write_text(
+        _replace_placeholders(config_text)
+        + """
+pkv_insurers:
+  names:
+    - Uniqua
+    - 123
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="non-empty string entries"):
+        load_config(config_path)
 
 
 def test_placeholder_space_id_is_rejected(tmp_path: Path) -> None:

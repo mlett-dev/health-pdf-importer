@@ -63,6 +63,7 @@ from health_importer.graph.state import (
     get_ok,
     get_ollama_base_url,
     get_ollama_timeout_seconds,
+    get_pkv_insurer_names,
     get_render_dpi,
     get_required_confidence_min,
     get_review_folder,
@@ -115,6 +116,7 @@ def extract_structured_invoice(state: GraphState) -> GraphState:
             model=str(state.get("text_model", get_vision_model(state))),
             base_url=str(get_ollama_base_url(state)),
             timeout_seconds=int(get_ollama_timeout_seconds(state)),
+            pkv_insurer_names=get_pkv_insurer_names(state),
         )
         method = "text"
 
@@ -549,6 +551,7 @@ def _extract_via_vision(state: GraphState) -> InvoiceExtraction:
             model=str(state.get(STATE_VISION_MODEL, "")),
             base_url=str(get_ollama_base_url(state)),
             timeout_seconds=int(get_ollama_timeout_seconds(state)),
+            pkv_insurer_names=get_pkv_insurer_names(state),
         )
     )
 

@@ -1,6 +1,6 @@
 """Regression tests for config dataclass default values."""
 
-from health_importer.config import KassenFileNamingConfig
+from health_importer.config import KassenFileNamingConfig, PkvInsurersConfig
 
 
 def test_kassen_file_naming_config_defaults() -> None:
@@ -22,3 +22,8 @@ def test_kassen_file_naming_config_all_fields() -> None:
     assert cfg.pattern == "{date}_{patient}.pdf"
     assert cfg.date_format == "%d-%m-%Y"
     assert cfg.max_topic_length == 20
+
+
+def test_pkv_insurers_config_defaults() -> None:
+    cfg = PkvInsurersConfig()
+    assert cfg.names == ("Uniqua", "Donau", "Merkur")

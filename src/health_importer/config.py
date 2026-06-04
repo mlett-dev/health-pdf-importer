@@ -136,6 +136,11 @@ class PkvFileNamingConfig:
 
 
 @dataclass(frozen=True)
+class PkvInsurersConfig:
+    names: tuple[str, ...] = ("Uniqua", "Donau", "Merkur")
+
+
+@dataclass(frozen=True)
 class KassenMatchConfig:
     auto_match_min: float
     review_match_min: float
@@ -168,6 +173,7 @@ class AppConfig:
     state_db: StateDbConfig
     kassen_file_naming: KassenFileNamingConfig
     pkv_file_naming: PkvFileNamingConfig
+    pkv_insurers: PkvInsurersConfig
     kassen_match: KassenMatchConfig
     email: EmailConfig
 
@@ -276,6 +282,7 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
         state_db=StateDbConfig(path=Path(_str(data, "state_db", "path"))),
         kassen_file_naming=_kassen_file_naming_config(data),
         pkv_file_naming=_pkv_file_naming_config(data),
+        pkv_insurers=_pkv_insurers_config(data),
         kassen_match=_kassen_match_config(data),
         email=_email_config(data),
     )
@@ -401,6 +408,12 @@ def _pkv_file_naming_config(data: dict[str, Any]) -> PkvFileNamingConfig:
     )
 
 
+def _pkv_insurers_config(data: dict[str, Any]) -> PkvInsurersConfig:
+    section = data.get("pkv_insurers", {})
+    names = _str_list_section_default(section, "names", ["Uniqua", "Donau", "Merkur"])
+    return PkvInsurersConfig(names=tuple(names))
+
+
 def _kassen_match_config(data: dict[str, Any]) -> KassenMatchConfig:
     section = data.get("kassen_match", {})
     return KassenMatchConfig(
@@ -473,6 +486,22 @@ def _str_or_empty_section_default(section: dict[str, Any], key: str, default: st
     if not isinstance(value, str):
         raise ConfigError(f"Expected string for section config {key}")
     return value
+
+
+def _str_list_section_default(
+    section: dict[str, Any], key: str, default: list[str]
+) -> list[str]:
+    value = section.get(key, default)
+    if not isinstance(value, list):
+        raise ConfigError(f"Expected list for section config {key}")
+    names = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ConfigError(f"Expected non-empty string entries for section config {key}")
+        names.append(item.strip())
+    if not names:
+        raise ConfigError(f"Expected at least one entry for section config {key}")
+    return names
 
 
 def _int_section_default(section: dict[str, Any], key: str, default: int) -> int:

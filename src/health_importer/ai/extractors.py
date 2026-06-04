@@ -7,7 +7,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from health_importer.ai.ollama_client import OllamaTextClient, OllamaVisionClient
-from health_importer.ai.prompts import load_prompt, page_text_for_prompt, vision_prompt_for_page
+from health_importer.ai.prompts import load_invoice_prompt, load_prompt, page_text_for_prompt, vision_prompt_for_page
 from health_importer.ai.schemas import (
     ExtractionVerification,
     InvoiceExtraction,
@@ -28,9 +28,10 @@ def extract_invoice_from_text(
     model: str,
     base_url: str,
     timeout_seconds: int,
+    pkv_insurer_names: tuple[str, ...] = ("Uniqua", "Donau", "Merkur"),
     max_retries: int = 1,
 ) -> InvoiceExtraction:
-    prompt = load_prompt("extract_invoice_text.md")
+    prompt = load_invoice_prompt("extract_invoice_text.md", pkv_insurer_names=pkv_insurer_names)
     text = page_text_for_prompt(pdf_text)
     client = OllamaTextClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
     messages = [
@@ -148,11 +149,14 @@ def extract_invoice_from_vision_pages(
     model: str,
     base_url: str,
     timeout_seconds: int,
+    pkv_insurer_names: tuple[str, ...] = ("Uniqua", "Donau", "Merkur"),
 ) -> list[VisionPageExtraction]:
     client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
     results = []
     for page_number, image_path in images:
-        response = client.describe_image(image_path, vision_prompt_for_page(page_number))
+        response = client.describe_image(
+            image_path, vision_prompt_for_page(page_number, pkv_insurer_names=pkv_insurer_names)
+        )
         try:
             results.append(VisionPageExtraction.model_validate(_loads_json_object(response)))
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:

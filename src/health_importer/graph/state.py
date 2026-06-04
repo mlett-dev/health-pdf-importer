@@ -65,6 +65,7 @@ class GraphState(TypedDict):
     ollama_timeout_seconds: NotRequired[int]
     verify_extraction_enabled: NotRequired[bool]
     allowed_patients: NotRequired[tuple[str, ...]]
+    pkv_insurer_names: NotRequired[tuple[str, ...]]
     required_confidence_min: NotRequired[float]
     max_amount_eur: NotRequired[str]
     max_topic_length: NotRequired[int]
@@ -139,6 +140,7 @@ STATE_VISION_MODEL = "vision_model"
 STATE_OLLAMA_TIMEOUT_SECONDS = "ollama_timeout_seconds"
 STATE_VERIFY_EXTRACTION_ENABLED = "verify_extraction_enabled"
 STATE_ALLOWED_PATIENTS = "allowed_patients"
+STATE_PKV_INSURER_NAMES = "pkv_insurer_names"
 STATE_REQUIRED_CONFIDENCE_MIN = "required_confidence_min"
 STATE_MAX_AMOUNT_EUR = "max_amount_eur"
 STATE_MAX_TOPIC_LENGTH = "max_topic_length"
@@ -181,6 +183,7 @@ _DEFAULT_VISION_MODEL = "qwen3.6:35b-a3b-q8_0"
 _DEFAULT_OLLAMA_TIMEOUT_SECONDS = 300
 _DEFAULT_VERIFY_EXTRACTION_ENABLED = True
 _DEFAULT_ALLOWED_PATIENTS = ("Max", "Anna")
+_DEFAULT_PKV_INSURER_NAMES = ("Uniqua", "Donau", "Merkur")
 _DEFAULT_REQUIRED_CONFIDENCE_MIN = 0.8
 _DEFAULT_MAX_AMOUNT_EUR = "5000"
 _DEFAULT_MAX_TOPIC_LENGTH = 60
@@ -373,6 +376,10 @@ def get_verify_extraction_enabled(state: GraphState) -> bool:
 
 def get_allowed_patients(state: GraphState) -> tuple[str, ...]:
     return state.get(STATE_ALLOWED_PATIENTS, _DEFAULT_ALLOWED_PATIENTS)
+
+
+def get_pkv_insurer_names(state: GraphState) -> tuple[str, ...]:
+    return state.get(STATE_PKV_INSURER_NAMES, _DEFAULT_PKV_INSURER_NAMES)
 
 
 def get_required_confidence_min(state: GraphState) -> float:
