@@ -25,7 +25,7 @@ Regeln:
 - `evidence` ist eine kurze wortwörtliche Textstelle aus dem Dokument.
 - `page` ist die 1-basierte Seitennummer der Evidence.
 - `document_type.value` ist immer `krankenkasse_antwort`.
-- `patient_first_name` ist der Vorname des Versicherten, z. B. `Max`, `Anna`.
+- `patient_first_name` ist der Vorname der **behandelten Person**: das Feld „Patient", wenn im Dokument vorhanden. „Versicherte(r)" / „Versicherungsnehmer(in)" bezeichnet den Beitragszahler – oft ein Elternteil – und ist häufig ein anderer Mensch als der Patient. Diesen Namen nur dann verwenden, wenn das Dokument keine eigene Patientenangabe enthält.
 - `doctor_name` ist der Name der behandelnden Arztes/Ordination, falls im Bescheid erwähnt (optional).
 - `bescheids_datum` ist das Datum des Bescheids, nicht das Rechnungsdatum. Format: `YYYY-MM-DD`.
 - `aufwendungsbetrag_eur` ist der **ursprüngliche Rechnungsbetrag/Aufwendungsbetrag** vor der Erstattung, z. B. "Für Ihre Aufwendungen in der Höhe von 210,00 Euro" (optional, für Matching und Restkosten).
@@ -49,7 +49,8 @@ Text:
 ```text
 [Seite 1]
 Sozialversicherungsträger Bescheid
-Versicherte: Max Mustermann
+Versicherte: Erika Mustermann
+Patient: Max Mustermann
 Leistungsdatum: 08.05.2026
 Aktenzeichen: TEST-AZ-0002
 Rechnung: Dr. Testarzt Prompt
@@ -62,7 +63,7 @@ Antwort:
 ```json
 {
   "document_type": {"value": "krankenkasse_antwort", "confidence": 0.95, "evidence": "Sozialversicherungsträger Bescheid", "page": 1},
-  "patient_first_name": {"value": "Max", "confidence": 0.95, "evidence": "Versicherte: Max Mustermann", "page": 1},
+  "patient_first_name": {"value": "Max", "confidence": 0.95, "evidence": "Patient: Max Mustermann", "page": 1},
   "doctor_name": {"value": "Dr. Testarzt Prompt", "confidence": 0.9, "evidence": "Rechnung: Dr. Testarzt Prompt", "page": 1},
   "bescheids_datum": {"value": "2026-05-15", "confidence": 0.9, "evidence": "Bescheid vom 15.05.2026", "page": 1},
   "aufwendungsbetrag_eur": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
