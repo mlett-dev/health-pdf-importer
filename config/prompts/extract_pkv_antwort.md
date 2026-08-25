@@ -24,7 +24,7 @@ Regeln:
 - `evidence` ist eine kurze wortwoertliche Textstelle aus dem Dokument.
 - `page` ist die 1-basierte Seitennummer der Evidence.
 - `document_type.value` ist immer `pkv_antwort`.
-- `patient_first_name` ist der Vorname des Versicherten, z. B. `Max`, `Anna`.
+- `patient_first_name` ist der Vorname der **behandelten Person**: das Feld "Patient", wenn im Dokument vorhanden. "Versicherte(r)" / "Versicherungsnehmer(in)" bezeichnet den Beitragszahler - oft ein Elternteil - und ist haeufig ein anderer Mensch als der Patient. Diesen Namen nur dann verwenden, wenn das Dokument keine eigene Patientenangabe enthaelt.
 - `doctor_name` ist der Name des Behandlers, z. B. `Dr. Testarzt OEGK`.
 - `erstattungsbetrag_eur` ist der von Pkv erstattete Betrag.
 - `bescheids_datum` ist das Datum der Pkv-Antwort/des Bescheids, nicht das Behandlungsdatum.
