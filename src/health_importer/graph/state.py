@@ -114,6 +114,9 @@ STATE_SELECTED_MATCH = "selected_match"
 STATE_MATCHING_CONFIDENCE = "matching_confidence"
 STATE_EMAIL_DRAFT_PATH = "email_draft_path"
 STATE_KASSEN_FILE_NAMING = "kassen_file_naming"
+STATE_BEFUND_FILE_NAMING = "befund_file_naming"
+STATE_BEFUND_MATCH_AUTO_MIN = "befund_match_auto_min"
+STATE_BEFUND_ANYTYPE_FILE_ID = "befund_anytype_file_id"
 STATE_PKV_FILE_NAMING = "pkv_file_naming"
 STATE_KASSEN_MATCH_AUTO_MIN = "kassen_match_auto_min"
 STATE_KASSEN_MATCH_REVIEW_MIN = "kassen_match_review_min"
@@ -270,6 +273,18 @@ def get_email_draft_path(state: GraphState) -> str | None:
 
 def get_kassen_file_naming(state: GraphState) -> dict | None:
     return state.get(STATE_KASSEN_FILE_NAMING)
+
+
+def get_befund_file_naming(state: GraphState) -> dict | None:
+    return state.get(STATE_BEFUND_FILE_NAMING)
+
+
+def get_befund_match_auto_min(state: GraphState) -> float:
+    return float(state.get(STATE_BEFUND_MATCH_AUTO_MIN, 0.90))
+
+
+def get_befund_anytype_file_id(state: GraphState) -> str | None:
+    return state.get(STATE_BEFUND_ANYTYPE_FILE_ID)
 
 
 def get_pkv_file_naming(state: GraphState) -> dict | None:

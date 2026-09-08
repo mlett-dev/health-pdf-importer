@@ -26,6 +26,14 @@ warnings.filterwarnings(
 from langgraph.graph import END, START, StateGraph
 
 from health_importer.graph.anytype_update_nodes import update_kassen_anytype, update_pkv_anytype
+from health_importer.graph.befund_nodes import (
+    attach_befund_to_invoice,
+    decide_befund_match,
+    match_befund_invoice,
+    move_befund_to_target,
+    prepare_befund_target_filename,
+    upload_befund_pdf,
+)
 from health_importer.graph.classification_nodes import route_by_document_type
 from health_importer.graph.file_nodes import (
     rename_file_to_target,
@@ -109,6 +117,13 @@ def build_graph():
     graph.add_node("kassen_review", kassen_review_node)
     graph.add_node("create_pkv_draft", create_pkv_draft)
     graph.add_node("move_kassen_to_done", move_kassen_to_done)
+    # Befund / Patientenbrief flow
+    graph.add_node("match_befund_invoice", match_befund_invoice)
+    graph.add_node("decide_befund_match", decide_befund_match)
+    graph.add_node("prepare_befund_target_filename", prepare_befund_target_filename)
+    graph.add_node("upload_befund_pdf", upload_befund_pdf)
+    graph.add_node("attach_befund_to_invoice", attach_befund_to_invoice)
+    graph.add_node("move_befund_to_target", move_befund_to_target)
     # Pkv-Antwort flow
     graph.add_node("extract_pkv_antwort", extract_pkv_antwort)
     graph.add_node("validate_pkv_antwort", validate_pkv_antwort_node)
@@ -140,6 +155,7 @@ def build_graph():
             "invoice_flow": "apply_manual_corrections",
             "kassen_flow": "extract_kassen_ruckmeldung",
             "pkv_flow": "extract_pkv_antwort",
+            "befund_flow": "match_befund_invoice",
         },
     )
 
@@ -182,6 +198,22 @@ def build_graph():
     graph.add_edge("move_kassen_to_done", "mark_finished")
     graph.add_edge("kassen_review", "mark_finished")
 
+    # Befund flow: attach to the invoice object, or land in the error folder so
+    # the document can be re-run once its invoice has been imported.
+    graph.add_edge("match_befund_invoice", "decide_befund_match")
+    graph.add_conditional_edges(
+        "decide_befund_match",
+        _befund_router,
+        {
+            "attach": "prepare_befund_target_filename",
+            "no_match": "move_befund_to_target",
+        },
+    )
+    graph.add_edge("prepare_befund_target_filename", "upload_befund_pdf")
+    graph.add_edge("upload_befund_pdf", "attach_befund_to_invoice")
+    graph.add_edge("attach_befund_to_invoice", "move_befund_to_target")
+    graph.add_edge("move_befund_to_target", "mark_finished")
+
     # Pkv-Antwort flow
     graph.add_edge("extract_pkv_antwort", "validate_pkv_antwort")
     graph.add_edge("validate_pkv_antwort", "match_pkv_invoice")
@@ -212,6 +244,10 @@ def build_graph():
     graph.add_edge("mark_finished", "cleanup_vision_temp")
     graph.add_edge("cleanup_vision_temp", END)
     return graph.compile()
+
+
+def _befund_router(state: GraphState) -> str:
+    return "attach" if get_next_route(state) == "befund_attach" else "no_match"
 
 
 def _kassen_or_invoice_router(state: GraphState) -> str:

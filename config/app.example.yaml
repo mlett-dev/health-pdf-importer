@@ -103,7 +103,15 @@ state_db:
 #   {doctor}            -> Voller Arztname inkl. Titel (z.B. Dr._Testarzt)
 #   {doctor_last_name}  -> Arzt-Nachname ohne Titel (z.B. Testarzt)
 #   {total_amount_eur}  -> Erstattungsbetrag als "123,45"
-# pkv_file_naming:
+# befund_file_naming:
+  enabled: true
+  pattern: "{date}_{doctor_last_name}_{patient}_befund.pdf"
+  date_format: "%Y_%m_%d"
+
+befund_match:
+  auto_match_min: 0.90
+
+pkv_file_naming:
 #   enabled: true
 #   pattern: "{date}_{patient}_PKV_{topic}.pdf"
 #   date_format: "%Y_%m_%d"
