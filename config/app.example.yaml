@@ -103,19 +103,23 @@ state_db:
 #   {doctor}            -> Voller Arztname inkl. Titel (z.B. Dr._Testarzt)
 #   {doctor_last_name}  -> Arzt-Nachname ohne Titel (z.B. Testarzt)
 #   {total_amount_eur}  -> Erstattungsbetrag als "123,45"
-# befund_file_naming:
-  enabled: true
-  pattern: "{date}_{doctor_last_name}_{patient}_befund.pdf"
-  date_format: "%Y_%m_%d"
-
-befund_match:
-  auto_match_min: 0.90
-
-pkv_file_naming:
+# pkv_file_naming:
 #   enabled: true
 #   pattern: "{date}_{patient}_PKV_{topic}.pdf"
 #   date_format: "%Y_%m_%d"
 #   max_topic_length: 40
+
+# Optional: Befund-/Patientenbrief-Namensschema
+# Verfuegbare Platzhalter: {date} {patient} {doctor} {doctor_last_name}
+# befund_file_naming:
+#   enabled: true
+#   pattern: "{date}_{doctor_last_name}_{patient}_befund.pdf"
+#   date_format: "%Y_%m_%d"
+
+# Optional: Schwelle, ab der ein Befund automatisch an eine Rechnung angehaengt wird.
+# Strenger als kassen_match, weil nur Patient, Arzt und Termin bewertet werden.
+# befund_match:
+#   auto_match_min: 0.90
 
 # Optional: Namen privater Krankenversicherer als Hinweis fuer die document_type-Erkennung
 # pkv_insurers:

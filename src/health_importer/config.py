@@ -419,7 +419,7 @@ def _kassen_file_naming_config(data: dict[str, Any]) -> KassenFileNamingConfig:
 
 
 def _befund_file_naming_config(data: dict[str, Any]) -> BefundFileNamingConfig:
-    section = data.get("befund_file_naming", {})
+    section = data.get("befund_file_naming") or {}
     return BefundFileNamingConfig(
         enabled=_bool_section_default(section, "enabled", True),
         pattern=_str_section_default(
@@ -430,7 +430,7 @@ def _befund_file_naming_config(data: dict[str, Any]) -> BefundFileNamingConfig:
 
 
 def _befund_match_config(data: dict[str, Any]) -> BefundMatchConfig:
-    section = data.get("befund_match", {})
+    section = data.get("befund_match") or {}
     return BefundMatchConfig(
         auto_match_min=_float_section_default(section, "auto_match_min", 0.90),
     )
