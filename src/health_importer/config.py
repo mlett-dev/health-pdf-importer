@@ -48,6 +48,7 @@ class PdfConfig:
     min_area_ratio: float
     min_pixel_width: int
     min_pixel_height: int
+    force_vision: bool
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,20 @@ class KassenFileNamingConfig:
 
 
 @dataclass(frozen=True)
+class BefundFileNamingConfig:
+    enabled: bool = True
+    pattern: str = "{date}_{doctor_last_name}_{patient}_Brief.pdf"
+    date_format: str = "%Y_%m_%d"
+
+
+@dataclass(frozen=True)
+class BefundMatchConfig:
+    # Stricter than the Kassen threshold: a Befund is scored on three criteria
+    # instead of six, so a weak match is easier to reach by accident.
+    auto_match_min: float = 0.90
+
+
+@dataclass(frozen=True)
 class PkvFileNamingConfig:
     enabled: bool = True
     pattern: str = "{date}_{patient}_PKV.pdf"
@@ -172,9 +187,11 @@ class AppConfig:
     privacy: PrivacyConfig
     state_db: StateDbConfig
     kassen_file_naming: KassenFileNamingConfig
+    befund_file_naming: BefundFileNamingConfig
     pkv_file_naming: PkvFileNamingConfig
     pkv_insurers: PkvInsurersConfig
     kassen_match: KassenMatchConfig
+    befund_match: BefundMatchConfig
     email: EmailConfig
 
 
@@ -237,6 +254,7 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
             min_area_ratio=_float_section_default(data.get("pdf", {}), "min_area_ratio", 0.01),
             min_pixel_width=_int_section_default(data.get("pdf", {}), "min_pixel_width", 80),
             min_pixel_height=_int_section_default(data.get("pdf", {}), "min_pixel_height", 40),
+            force_vision=bool(data.get("pdf", {}).get("force_vision", False)),
         ),
         confidence=ConfidenceConfig(
             auto_create_min=_float(data, "confidence", "auto_create_min"),
@@ -281,9 +299,11 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
         ),
         state_db=StateDbConfig(path=Path(_str(data, "state_db", "path"))),
         kassen_file_naming=_kassen_file_naming_config(data),
+        befund_file_naming=_befund_file_naming_config(data),
         pkv_file_naming=_pkv_file_naming_config(data),
         pkv_insurers=_pkv_insurers_config(data),
         kassen_match=_kassen_match_config(data),
+        befund_match=_befund_match_config(data),
         email=_email_config(data),
     )
 
@@ -395,6 +415,24 @@ def _kassen_file_naming_config(data: dict[str, Any]) -> KassenFileNamingConfig:
         pattern=_str_section_default(section, "pattern", "{date}_{patient}_GKK_{topic}.pdf"),
         date_format=_str_section_default(section, "date_format", "%Y_%m_%d"),
         max_topic_length=_int_section_default(section, "max_topic_length", 40),
+    )
+
+
+def _befund_file_naming_config(data: dict[str, Any]) -> BefundFileNamingConfig:
+    section = data.get("befund_file_naming") or {}
+    return BefundFileNamingConfig(
+        enabled=_bool_section_default(section, "enabled", True),
+        pattern=_str_section_default(
+            section, "pattern", "{date}_{doctor_last_name}_{patient}_Brief.pdf"
+        ),
+        date_format=_str_section_default(section, "date_format", "%Y_%m_%d"),
+    )
+
+
+def _befund_match_config(data: dict[str, Any]) -> BefundMatchConfig:
+    section = data.get("befund_match") or {}
+    return BefundMatchConfig(
+        auto_match_min=_float_section_default(section, "auto_match_min", 0.90),
     )
 
 

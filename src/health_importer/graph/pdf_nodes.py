@@ -28,6 +28,7 @@ from health_importer.graph.state import (
     get_next_route,
     get_ocr_language,
     get_ocr_pdf_path,
+    get_force_vision,
     get_render_dpi,
 )
 from health_importer.pdf.extract_text import extract_embedded_text
@@ -88,7 +89,12 @@ def evaluate_embedded_text_quality(state: GraphState) -> GraphState:
             for inspection in image_stats.inspections
         ],
     }
-    if image_stats.relevant_image_count > 0:
+    if get_force_vision(state):
+        next_state[STATE_NEXT_ROUTE] = "vision"
+        route_message = (
+            f"Text quality score {quality.score:.3f}; pdf.force_vision is set; route vision."
+        )
+    elif image_stats.relevant_image_count > 0:
         next_state[STATE_NEXT_ROUTE] = "vision"
         route_message = (
             f"Text quality score {quality.score:.3f}; first page has "

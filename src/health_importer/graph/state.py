@@ -38,8 +38,10 @@ class GraphState(TypedDict):
     matching_confidence: NotRequired[float]
     email_draft_path: NotRequired[str | None]
     kassen_file_naming: NotRequired[dict]
+    befund_file_naming: NotRequired[dict]
     pkv_file_naming: NotRequired[dict]
     kassen_match_auto_min: NotRequired[float]
+    befund_match_auto_min: NotRequired[float]
     kassen_match_review_min: NotRequired[float]
     correction_overrides: NotRequired[dict]
     extraction_method: NotRequired[str]
@@ -56,6 +58,7 @@ class GraphState(TypedDict):
     render_dpi: NotRequired[int]
     max_vision_pages: NotRequired[int]
     min_area_ratio: NotRequired[float]
+    force_vision: NotRequired[bool]
     min_pixel_width: NotRequired[int]
     min_pixel_height: NotRequired[int]
     min_text_chars: NotRequired[int]
@@ -83,6 +86,7 @@ class GraphState(TypedDict):
     pdf_image_stats: NotRequired[dict]
     vision_pages_temp_dir: NotRequired[str]
     kassen_anytype_file_id: NotRequired[str]
+    befund_anytype_file_id: NotRequired[str]
     pkv_anytype_file_id: NotRequired[str]
     pkv_draft_path: NotRequired[str]
     email_config: NotRequired[dict]
@@ -113,6 +117,9 @@ STATE_SELECTED_MATCH = "selected_match"
 STATE_MATCHING_CONFIDENCE = "matching_confidence"
 STATE_EMAIL_DRAFT_PATH = "email_draft_path"
 STATE_KASSEN_FILE_NAMING = "kassen_file_naming"
+STATE_BEFUND_FILE_NAMING = "befund_file_naming"
+STATE_BEFUND_MATCH_AUTO_MIN = "befund_match_auto_min"
+STATE_BEFUND_ANYTYPE_FILE_ID = "befund_anytype_file_id"
 STATE_PKV_FILE_NAMING = "pkv_file_naming"
 STATE_KASSEN_MATCH_AUTO_MIN = "kassen_match_auto_min"
 STATE_KASSEN_MATCH_REVIEW_MIN = "kassen_match_review_min"
@@ -134,6 +141,7 @@ STATE_MIN_AREA_RATIO = "min_area_ratio"
 STATE_MIN_PIXEL_WIDTH = "min_pixel_width"
 STATE_MIN_PIXEL_HEIGHT = "min_pixel_height"
 STATE_MIN_TEXT_CHARS = "min_text_chars"
+STATE_FORCE_VISION = "force_vision"
 STATE_OLLAMA_BASE_URL = "ollama_base_url"
 STATE_TEXT_MODEL = "text_model"
 STATE_VISION_MODEL = "vision_model"
@@ -270,6 +278,18 @@ def get_kassen_file_naming(state: GraphState) -> dict | None:
     return state.get(STATE_KASSEN_FILE_NAMING)
 
 
+def get_befund_file_naming(state: GraphState) -> dict | None:
+    return state.get(STATE_BEFUND_FILE_NAMING)
+
+
+def get_befund_match_auto_min(state: GraphState) -> float:
+    return float(state.get(STATE_BEFUND_MATCH_AUTO_MIN, 0.90))
+
+
+def get_befund_anytype_file_id(state: GraphState) -> str | None:
+    return state.get(STATE_BEFUND_ANYTYPE_FILE_ID)
+
+
 def get_pkv_file_naming(state: GraphState) -> dict | None:
     return state.get(STATE_PKV_FILE_NAMING)
 
@@ -340,6 +360,10 @@ def get_max_vision_pages(state: GraphState) -> int:
 
 def get_min_area_ratio(state: GraphState) -> float:
     return state.get(STATE_MIN_AREA_RATIO, _DEFAULT_MIN_AREA_RATIO)
+
+
+def get_force_vision(state: GraphState) -> bool:
+    return bool(state.get(STATE_FORCE_VISION, False))
 
 
 def get_min_pixel_width(state: GraphState) -> int:

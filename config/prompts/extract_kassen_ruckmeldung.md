@@ -25,7 +25,7 @@ Regeln:
 - `evidence` ist eine kurze wortwörtliche Textstelle aus dem Dokument.
 - `page` ist die 1-basierte Seitennummer der Evidence.
 - `document_type.value` ist immer `krankenkasse_antwort`.
-- `patient_first_name` ist der Vorname der **behandelten Person**: das Feld „Patient", wenn im Dokument vorhanden. „Versicherte(r)" / „Versicherungsnehmer(in)" bezeichnet den Beitragszahler – oft ein Elternteil – und ist häufig ein anderer Mensch als der Patient. Diesen Namen nur dann verwenden, wenn das Dokument keine eigene Patientenangabe enthält.
+- `patient_first_name` ist der Vorname der **behandelten Person**: das Feld „Patient", wenn im Dokument vorhanden. „Versicherte(r)" / „Versicherungsnehmer(in)" bezeichnet den Beitragszahler – oft ein Elternteil – und ist häufig ein anderer Mensch als der Patient. Diesen Namen nur dann verwenden, wenn das Dokument keine eigene Patientenangabe enthält. Enthält das Dokument weder eine Patientenangabe noch „Versicherte(r)", nutze als letzte Möglichkeit den Anschriften- oder Anredeblock, aber mit niedriger `confidence` (höchstens 0.5): auf Bescheiden ist die adressierte Person häufig der Versicherungsnehmer und nicht die behandelte Person.
 - `doctor_name` ist der Name der behandelnden Arztes/Ordination, falls im Bescheid erwähnt (optional).
 - `bescheids_datum` ist das Datum des Bescheids, nicht das Rechnungsdatum. Format: `YYYY-MM-DD`.
 - `aufwendungsbetrag_eur` ist der **ursprüngliche Rechnungsbetrag/Aufwendungsbetrag** vor der Erstattung, z. B. "Für Ihre Aufwendungen in der Höhe von 210,00 Euro" (optional, für Matching und Restkosten).

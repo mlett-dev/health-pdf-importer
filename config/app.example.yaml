@@ -31,6 +31,7 @@ pdf:
   min_area_ratio: 0.01
   min_pixel_width: 80
   min_pixel_height: 40
+  force_vision: false
 
 confidence:
   auto_create_min: 0.85
@@ -107,6 +108,18 @@ state_db:
 #   pattern: "{date}_{patient}_PKV_{topic}.pdf"
 #   date_format: "%Y_%m_%d"
 #   max_topic_length: 40
+
+# Optional: Befund-/Patientenbrief-Namensschema
+# Verfuegbare Platzhalter: {date} {patient} {doctor} {doctor_last_name}
+# befund_file_naming:
+#   enabled: true
+#   pattern: "{date}_{doctor_last_name}_{patient}_Brief.pdf"
+#   date_format: "%Y_%m_%d"
+
+# Optional: Schwelle, ab der ein Befund automatisch an eine Rechnung angehaengt wird.
+# Strenger als kassen_match, weil nur Patient, Arzt und Termin bewertet werden.
+# befund_match:
+#   auto_match_min: 0.90
 
 # Optional: Namen privater Krankenversicherer als Hinweis fuer die document_type-Erkennung
 # pkv_insurers:

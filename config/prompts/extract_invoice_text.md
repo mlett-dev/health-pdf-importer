@@ -31,6 +31,7 @@ Regeln:
 - Wenn kein Behandlungstermin sichtbar ist, nutze `appointment_date: null` und setze `invoice_date`, falls sichtbar.
 - `topic` ist eine kurze neutrale Beschreibung der Leistung, z. B. `Organscreening`.
 - `document_type.value` ist einer von: `honorarnote`, `ueberweisung`, `befund`, `krankenkasse_antwort`, `pkv_antwort`, `sonstiges`.
+- `patient_first_name` ist der Vorname der behandelten Person. Bevorzuge ein ausdrückliches Feld wie `Patient:`. Fehlt ein solches Feld, nutze den Anschriften- oder Anredeblock des Dokuments: bei Arztrechnungen, Befunden und Patientenbriefen ist die adressierte Person der Patient. Beispiele: `Frau Katharina Musterfrau, Beispielgasse, 1100 Wien` → `Katharina`; `Sehr geehrte Frau Katharina Musterfrau,` → `Katharina`. Nimm nur den Vornamen, nicht den Nachnamen, und niemals den Namen des Arztes oder der Ordination.
 
 Regeln für `document_type`:
 

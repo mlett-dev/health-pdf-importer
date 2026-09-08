@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from health_importer.config import (
+    BefundFileNamingConfig,
+    BefundMatchConfig,
     AnytypeConfig,
     ConfigError,
     EmailConfig,
@@ -22,6 +24,8 @@ from health_importer.graph.state import (
     STATE_EMAIL_CONFIG,
     STATE_ERROR_FOLDER,
     STATE_FILE_ID,
+    STATE_BEFUND_FILE_NAMING,
+    STATE_BEFUND_MATCH_AUTO_MIN,
     STATE_KASSEN_FILE_NAMING,
     STATE_KASSEN_MATCH_AUTO_MIN,
     STATE_KASSEN_MATCH_REVIEW_MIN,
@@ -50,6 +54,7 @@ def run_once(
     max_vision_pages: int = 3,
     min_text_chars: int = 500,
     min_area_ratio: float = 0.01,
+    force_vision: bool = False,
     min_pixel_width: int = 80,
     min_pixel_height: int = 40,
     ollama_base_url: str = "http://127.0.0.1:11434",
@@ -70,8 +75,10 @@ def run_once(
     correction_overrides: dict | None = None,
     email_config: EmailConfig | None = None,
     kassen_file_naming: KassenFileNamingConfig | None = None,
+    befund_file_naming: BefundFileNamingConfig | None = None,
     pkv_file_naming: PkvFileNamingConfig | None = None,
     kassen_match: KassenMatchConfig | None = None,
+    befund_match: BefundMatchConfig | None = None,
     allow_external_services: bool = False,
     sidecar_policy: str = "always",
     write_sidecar_json: bool = True,
@@ -100,6 +107,7 @@ def run_once(
         "max_vision_pages": max_vision_pages,
         "min_text_chars": min_text_chars,
         "min_area_ratio": min_area_ratio,
+        "force_vision": force_vision,
         "min_pixel_width": min_pixel_width,
         "min_pixel_height": min_pixel_height,
         "ollama_base_url": ollama_base_url,
@@ -144,6 +152,12 @@ def run_once(
             "date_format": kassen_file_naming.date_format,
             "max_topic_length": kassen_file_naming.max_topic_length,
         }
+    if befund_file_naming is not None:
+        initial_state[STATE_BEFUND_FILE_NAMING] = {
+            "enabled": befund_file_naming.enabled,
+            "pattern": befund_file_naming.pattern,
+            "date_format": befund_file_naming.date_format,
+        }
     if pkv_file_naming is not None:
         initial_state[STATE_PKV_FILE_NAMING] = {
             "enabled": pkv_file_naming.enabled,
@@ -155,6 +169,8 @@ def run_once(
     if kassen_match is not None:
         initial_state[STATE_KASSEN_MATCH_AUTO_MIN] = kassen_match.auto_match_min
         initial_state[STATE_KASSEN_MATCH_REVIEW_MIN] = kassen_match.review_match_min
+    if befund_match is not None:
+        initial_state[STATE_BEFUND_MATCH_AUTO_MIN] = befund_match.auto_match_min
     if anytype_config is not None:
         initial_state[STATE_ANYTYPE_CONFIG] = {
             "space_id": anytype_config.space_id,

@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from health_importer.config import FileNamingConfig, KassenFileNamingConfig, PkvFileNamingConfig
+from health_importer.config import (
+    BefundFileNamingConfig,
+    FileNamingConfig,
+    KassenFileNamingConfig,
+    PkvFileNamingConfig,
+)
 from health_importer.workflow.filesystem import unique_destination
 from health_importer.workflow.validation import (
     ValidatedInvoice,
@@ -194,3 +200,26 @@ def _extract_last_name(name: str | None) -> str:
 
 _UNSAFE_PART_RE = re.compile(r"[^A-Za-z0-9.,-]+")
 _UNDERSCORE_RE = re.compile(r"_+")
+
+
+def generate_befund_filename(
+    config: BefundFileNamingConfig,
+    *,
+    appointment_date: date | None,
+    doctor_name: str | None,
+    patient_first_name: str,
+) -> str:
+    """Name a Befund after the visit it documents, not after an invoice number.
+
+    A Befund has no amount and no invoice number, so the pattern deliberately
+    offers only date, doctor and patient.
+    """
+    if not config.enabled:
+        return ""
+    values = {
+        "date": _slugify(appointment_date.strftime(config.date_format)) if appointment_date else "",
+        "patient": _slugify(patient_first_name),
+        "doctor": _slugify(doctor_name or "Unbekannt"),
+        "doctor_last_name": _slugify(_extract_last_name(doctor_name)),
+    }
+    return _generate_filename(config.pattern, values, prefix="befund")

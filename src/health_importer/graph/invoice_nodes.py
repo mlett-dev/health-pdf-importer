@@ -216,6 +216,10 @@ def verify_structured_invoice(state: GraphState) -> GraphState:
     next_state[STATE_EXTRACTION_VERIFICATION] = (
         verification.model_dump(mode="json") if verification else None
     )
+    # verify_extraction_vision raises patient_first_name.confidence when it could
+    # independently confirm a name the address-block fallback had read, so the
+    # extraction has to go back into the state.
+    next_state[STATE_INVOICE_EXTRACTION] = extraction.model_dump(mode="json")
     next_state[STATE_STATUS] = "EXTRACTION_VERIFIED"
     next_state[STATE_EVENTS].append(
         event("verify_structured_invoice", "EXTRACTION_VERIFIED", "Verified extraction.")

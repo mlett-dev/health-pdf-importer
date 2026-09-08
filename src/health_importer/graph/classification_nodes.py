@@ -24,6 +24,11 @@ def route_by_document_type(state: GraphState) -> GraphState:
                 "route_by_document_type", "KASSEN_FLOW", "Document type is krankenkasse_antwort."
             )
         )
+    elif doc_type == "befund":
+        next_state[STATE_NEXT_ROUTE] = "befund_flow"
+        next_state[STATE_EVENTS].append(
+            _event("route_by_document_type", "BEFUND_FLOW", "Document type is befund.")
+        )
     elif doc_type == "pkv_antwort":
         next_state[STATE_NEXT_ROUTE] = "pkv_flow"
         next_state[STATE_EVENTS].append(

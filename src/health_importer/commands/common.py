@@ -61,6 +61,21 @@ def effective_anytype_dry_run(config_dry_run: bool, args: argparse.Namespace) ->
     return config_dry_run
 
 
+def state_db_path_for(config, dry_run: bool) -> Path:
+    """Keep dry-run bookkeeping out of the productive state database.
+
+    The dry-run flag only suppresses Anytype writes; registration and status
+    are persisted either way. Sharing one database means a dry run marks a
+    document DONE, and the productive run that follows skips it as a duplicate
+    -- the document can then never be imported. A separate file keeps a dry run
+    reproducible without touching what production has already seen.
+    """
+    path = Path(config.state_db.path)
+    if not dry_run:
+        return path
+    return path.with_name(f"{path.stem}.dryrun{path.suffix}")
+
+
 def run_once_with_config(
     pdf_path: Path,
     config,
@@ -70,12 +85,13 @@ def run_once_with_config(
 ) -> dict:
     return run_once(
         pdf_path,
-        state_db_path=config.state_db.path,
+        state_db_path=state_db_path_for(config, anytype_dry_run),
         ocr_language=config.pdf.ocr_language,
         render_dpi=config.pdf.render_dpi,
         max_vision_pages=config.pdf.max_vision_pages,
         min_text_chars=config.pdf.min_text_chars,
         min_area_ratio=config.pdf.min_area_ratio,
+        force_vision=config.pdf.force_vision,
         min_pixel_width=config.pdf.min_pixel_width,
         min_pixel_height=config.pdf.min_pixel_height,
         ollama_base_url=config.ollama.base_url,
@@ -94,8 +110,10 @@ def run_once_with_config(
         correction_overrides=correction_overrides,
         email_config=config.email,
         kassen_file_naming=config.kassen_file_naming,
+        befund_file_naming=config.befund_file_naming,
         pkv_file_naming=config.pkv_file_naming,
         kassen_match=config.kassen_match,
+        befund_match=config.befund_match,
         allow_external_services=config.privacy.allow_external_services,
         sidecar_policy=config.privacy.sidecar_policy,
         write_sidecar_json=config.privacy.write_sidecar_json,
@@ -163,7 +181,7 @@ def move_to_final_folder(source: Path, config, result: dict) -> dict:
     next_result["final_move_collision_resolved"] = collision_resolved
     file_id = next_result.get("file_id")
     if file_id is not None and "duplicate_of_file_id" not in next_result:
-        db = StateDb(config.state_db.path)
+        db = StateDb(state_db_path_for(config, bool(next_result.get("anytype_dry_run"))))
         db.initialize()
         db.set_current_path(int(file_id), destination)
     return next_result
