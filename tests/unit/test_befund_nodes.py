@@ -111,13 +111,13 @@ def test_target_filename_follows_the_invoice_convention() -> None:
     state = _state(
         befund_file_naming={
             "enabled": True,
-            "pattern": "{date}_{doctor_last_name}_{patient}_befund.pdf",
+            "pattern": "{date}_{doctor_last_name}_{patient}_Brief.pdf",
             "date_format": "%Y_%m_%d",
         },
         anytype_config={"patients": [{"name": "Kathi", "aliases": ["Katharina"]}]},
     )
     result = prepare_befund_target_filename(state)
-    assert result["target_filename"] == "2026_09_02_Epsilon_Kathi_befund.pdf"
+    assert result["target_filename"] == "2026_09_02_Epsilon_Kathi_Brief.pdf"
 
 
 def test_attach_without_uploaded_file_marks_the_run_failed() -> None:
@@ -147,3 +147,27 @@ def test_move_to_error_keeps_the_run_marked_failed(tmp_path: Path) -> None:
         )
     )
     assert result["ok"] is False
+
+
+def test_rename_happens_before_the_upload() -> None:
+    # Anytype stores the file under the name it has at upload time, so renaming
+    # afterwards would leave the scanner's name in the space.
+    from health_importer.graph.build_graph import build_graph
+
+    edges = {(e.source, e.target) for e in build_graph().get_graph().edges}
+    assert ("prepare_befund_target_filename", "rename_befund_file") in edges
+    assert ("rename_befund_file", "upload_befund_pdf") in edges
+    assert ("prepare_befund_target_filename", "upload_befund_pdf") not in edges
+
+
+def test_befund_file_is_renamed_on_disk(tmp_path: Path) -> None:
+    from health_importer.graph.file_nodes import rename_befund_file
+
+    pdf = tmp_path / "Image_20260907_0001_2.pdf"
+    pdf.write_bytes(b"pdf")
+    result = rename_befund_file(
+        _state(file_path=str(pdf), target_filename="2026_09_02_Epsilon_Kathi_Brief.pdf")
+    )
+    assert Path(result["file_path"]).name == "2026_09_02_Epsilon_Kathi_Brief.pdf"
+    assert Path(result["file_path"]).exists()
+    assert not pdf.exists()

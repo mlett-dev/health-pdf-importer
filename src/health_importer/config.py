@@ -131,7 +131,7 @@ class KassenFileNamingConfig:
 @dataclass(frozen=True)
 class BefundFileNamingConfig:
     enabled: bool = True
-    pattern: str = "{date}_{doctor_last_name}_{patient}_befund.pdf"
+    pattern: str = "{date}_{doctor_last_name}_{patient}_Brief.pdf"
     date_format: str = "%Y_%m_%d"
 
 
@@ -423,7 +423,7 @@ def _befund_file_naming_config(data: dict[str, Any]) -> BefundFileNamingConfig:
     return BefundFileNamingConfig(
         enabled=_bool_section_default(section, "enabled", True),
         pattern=_str_section_default(
-            section, "pattern", "{date}_{doctor_last_name}_{patient}_befund.pdf"
+            section, "pattern", "{date}_{doctor_last_name}_{patient}_Brief.pdf"
         ),
         date_format=_str_section_default(section, "date_format", "%Y_%m_%d"),
     )

@@ -113,7 +113,7 @@ state_db:
 # Verfuegbare Platzhalter: {date} {patient} {doctor} {doctor_last_name}
 # befund_file_naming:
 #   enabled: true
-#   pattern: "{date}_{doctor_last_name}_{patient}_befund.pdf"
+#   pattern: "{date}_{doctor_last_name}_{patient}_Brief.pdf"
 #   date_format: "%Y_%m_%d"
 
 # Optional: Schwelle, ab der ein Befund automatisch an eine Rechnung angehaengt wird.

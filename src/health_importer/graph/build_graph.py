@@ -37,6 +37,7 @@ from health_importer.graph.befund_nodes import (
 from health_importer.graph.classification_nodes import route_by_document_type
 from health_importer.graph.file_nodes import (
     rename_file_to_target,
+    rename_befund_file,
     rename_kassen_file,
     rename_pkv_file,
 )
@@ -121,6 +122,7 @@ def build_graph():
     graph.add_node("match_befund_invoice", match_befund_invoice)
     graph.add_node("decide_befund_match", decide_befund_match)
     graph.add_node("prepare_befund_target_filename", prepare_befund_target_filename)
+    graph.add_node("rename_befund_file", rename_befund_file)
     graph.add_node("upload_befund_pdf", upload_befund_pdf)
     graph.add_node("attach_befund_to_invoice", attach_befund_to_invoice)
     graph.add_node("move_befund_to_target", move_befund_to_target)
@@ -209,7 +211,8 @@ def build_graph():
             "no_match": "move_befund_to_target",
         },
     )
-    graph.add_edge("prepare_befund_target_filename", "upload_befund_pdf")
+    graph.add_edge("prepare_befund_target_filename", "rename_befund_file")
+    graph.add_edge("rename_befund_file", "upload_befund_pdf")
     graph.add_edge("upload_befund_pdf", "attach_befund_to_invoice")
     graph.add_edge("attach_befund_to_invoice", "move_befund_to_target")
     graph.add_edge("move_befund_to_target", "mark_finished")

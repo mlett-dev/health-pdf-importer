@@ -30,6 +30,15 @@ def rename_kassen_file(state: GraphState) -> GraphState:
     return _do_rename(state, node_name="rename_kassen_file")
 
 
+def rename_befund_file(state: GraphState) -> GraphState:
+    """Rename for Befund flow.
+
+    Runs before the upload so Anytype stores the file under the final name
+    rather than the scanner's.
+    """
+    return _do_rename(state, node_name="rename_befund_file")
+
+
 def rename_pkv_file(state: GraphState) -> GraphState:
     """Rename for Pkv flow."""
     return _do_rename(state, node_name="rename_pkv_file")
