@@ -262,11 +262,16 @@ def attach_befund_to_invoice(state: GraphState) -> GraphState:
     befund_file_id = get_befund_anytype_file_id(state)
 
     if get_ok(state) is False or not match or not befund_file_id:
+        # Not attaching is a failure for this flow: the whole point of a Befund
+        # is to end up on its invoice object. Marking it keeps mark_finished
+        # from reporting DONE and moving the file to the done folder.
+        next_state[STATE_OK] = False
+        next_state[STATE_STATUS] = "BEFUND_ATTACH_SKIPPED"
         next_state[STATE_EVENTS].append(
             event(
                 "attach_befund_to_invoice",
                 "BEFUND_ATTACH_SKIPPED",
-                "No match or no uploaded file; nothing to attach.",
+                f"Nothing to attach (match={bool(match)}, uploaded={bool(befund_file_id)}).",
             )
         )
         return next_state
@@ -334,6 +339,11 @@ def move_befund_to_target(state: GraphState) -> GraphState:
         db.initialize()
         db.set_current_path(int(file_id), moved)
 
+    if failed:
+        # mark_finished derives the final status from ok, and the caller moves
+        # the file according to that status -- without this the file would be
+        # pulled back out of the error folder.
+        next_state[STATE_OK] = False
     next_state[STATE_EVENTS].append(
         event(
             "move_befund_to_target",

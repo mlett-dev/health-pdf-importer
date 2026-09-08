@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from health_importer.graph.befund_nodes import (
+    attach_befund_to_invoice,
     decide_befund_match,
     match_befund_invoice,
     move_befund_to_target,
@@ -117,3 +118,32 @@ def test_target_filename_follows_the_invoice_convention() -> None:
     )
     result = prepare_befund_target_filename(state)
     assert result["target_filename"] == "2026_09_02_Epsilon_Kathi_befund.pdf"
+
+
+def test_attach_without_uploaded_file_marks_the_run_failed() -> None:
+    # Regression: this used to log a skip and leave ok untouched, so
+    # mark_finished reported DONE and the caller moved the file to 03_done.
+    state = _state(selected_match={"object_id": "obj1", "name": "Rechnung"})
+    result = attach_befund_to_invoice(state)
+    assert result["ok"] is False
+    assert result["status"] == "BEFUND_ATTACH_SKIPPED"
+
+
+def test_attach_without_a_match_marks_the_run_failed() -> None:
+    state = _state(selected_match=None, befund_anytype_file_id="file-1")
+    result = attach_befund_to_invoice(state)
+    assert result["ok"] is False
+
+
+def test_move_to_error_keeps_the_run_marked_failed(tmp_path: Path) -> None:
+    pdf = tmp_path / "brief.pdf"
+    pdf.write_bytes(b"pdf")
+    result = move_befund_to_target(
+        _state(
+            file_path=str(pdf),
+            status="BEFUND_ATTACH_SKIPPED",
+            done_folder=str(tmp_path / "done"),
+            error_folder=str(tmp_path / "error"),
+        )
+    )
+    assert result["ok"] is False
