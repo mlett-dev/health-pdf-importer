@@ -31,6 +31,7 @@ pdf:
   min_area_ratio: 0.01
   min_pixel_width: 80
   min_pixel_height: 40
+  force_vision: false
 
 confidence:
   auto_create_min: 0.85

@@ -89,3 +89,54 @@ def test_render_vision_pages_if_needed_skips_when_not_needed(tmp_path: Path) -> 
     )
 
     assert result["events"][0]["status"] == "VISION_SKIPPED"
+
+
+def _image_stats_without_images() -> Mock:
+    stats = Mock()
+    stats.page_number = 1
+    stats.image_count = 0
+    stats.relevant_image_count = 0
+    stats.largest_area_ratio = 0.0
+    stats.min_area_ratio = 0.05
+    stats.min_pixel_width = 80
+    stats.min_pixel_height = 40
+    stats.inspections = []
+    stats.skip_reason_summary.return_value = "no_images"
+    return stats
+
+
+def _route_with(force_vision: bool, tmp_path: Path) -> str:
+    pdf_path = tmp_path / "invoice.pdf"
+    pdf_path.write_bytes(b"pdf")
+    quality = Mock()
+    quality.route = "llm_text_extraction"
+    quality.score = 0.95
+    quality.to_dict.return_value = {"score": 0.95, "route": "llm_text_extraction"}
+
+    with (
+        patch("health_importer.graph.pdf_nodes.evaluate_text_quality", return_value=quality),
+        patch(
+            "health_importer.graph.pdf_nodes.first_page_image_stats",
+            return_value=_image_stats_without_images(),
+        ),
+    ):
+        result = evaluate_embedded_text_quality(
+            {
+                "file_path": str(pdf_path),
+                "status": "LOADED",
+                "pdf_text": {"pages": [{"text": "viel guter text"}]},
+                "events": [],
+                "force_vision": force_vision,
+            }
+        )
+    return result["next_route"]
+
+
+def test_good_embedded_text_without_images_stays_on_the_text_path(tmp_path: Path) -> None:
+    assert _route_with(False, tmp_path) == "llm_text_extraction"
+
+
+def test_force_vision_overrides_good_embedded_text(tmp_path: Path) -> None:
+    # Operational lever: makes every document take the vision path, even a
+    # born-digital PDF whose logo stays under min_area_ratio.
+    assert _route_with(True, tmp_path) == "vision"

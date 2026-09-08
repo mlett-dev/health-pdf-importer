@@ -56,6 +56,7 @@ class GraphState(TypedDict):
     render_dpi: NotRequired[int]
     max_vision_pages: NotRequired[int]
     min_area_ratio: NotRequired[float]
+    force_vision: NotRequired[bool]
     min_pixel_width: NotRequired[int]
     min_pixel_height: NotRequired[int]
     min_text_chars: NotRequired[int]
@@ -134,6 +135,7 @@ STATE_MIN_AREA_RATIO = "min_area_ratio"
 STATE_MIN_PIXEL_WIDTH = "min_pixel_width"
 STATE_MIN_PIXEL_HEIGHT = "min_pixel_height"
 STATE_MIN_TEXT_CHARS = "min_text_chars"
+STATE_FORCE_VISION = "force_vision"
 STATE_OLLAMA_BASE_URL = "ollama_base_url"
 STATE_TEXT_MODEL = "text_model"
 STATE_VISION_MODEL = "vision_model"
@@ -340,6 +342,10 @@ def get_max_vision_pages(state: GraphState) -> int:
 
 def get_min_area_ratio(state: GraphState) -> float:
     return state.get(STATE_MIN_AREA_RATIO, _DEFAULT_MIN_AREA_RATIO)
+
+
+def get_force_vision(state: GraphState) -> bool:
+    return bool(state.get(STATE_FORCE_VISION, False))
 
 
 def get_min_pixel_width(state: GraphState) -> int:

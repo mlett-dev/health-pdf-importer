@@ -48,6 +48,7 @@ class PdfConfig:
     min_area_ratio: float
     min_pixel_width: int
     min_pixel_height: int
+    force_vision: bool
 
 
 @dataclass(frozen=True)
@@ -237,6 +238,7 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
             min_area_ratio=_float_section_default(data.get("pdf", {}), "min_area_ratio", 0.01),
             min_pixel_width=_int_section_default(data.get("pdf", {}), "min_pixel_width", 80),
             min_pixel_height=_int_section_default(data.get("pdf", {}), "min_pixel_height", 40),
+            force_vision=bool(data.get("pdf", {}).get("force_vision", False)),
         ),
         confidence=ConfidenceConfig(
             auto_create_min=_float(data, "confidence", "auto_create_min"),

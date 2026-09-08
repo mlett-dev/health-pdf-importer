@@ -76,6 +76,7 @@ def run_once_with_config(
         max_vision_pages=config.pdf.max_vision_pages,
         min_text_chars=config.pdf.min_text_chars,
         min_area_ratio=config.pdf.min_area_ratio,
+        force_vision=config.pdf.force_vision,
         min_pixel_width=config.pdf.min_pixel_width,
         min_pixel_height=config.pdf.min_pixel_height,
         ollama_base_url=config.ollama.base_url,
