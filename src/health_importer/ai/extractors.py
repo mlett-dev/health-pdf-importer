@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 from pathlib import Path
+from typing import TypeVar
 
-from pydantic import ValidationError
+from PIL import Image
+from pydantic import BaseModel, ValidationError
 
-from health_importer.ai.ollama_client import OllamaTextClient, OllamaVisionClient
+from health_importer.ai.ollama_client import OllamaError, OllamaTextClient, OllamaVisionClient
 from health_importer.ai.prompts import load_invoice_prompt, load_prompt, page_text_for_prompt, vision_prompt_for_page
 from health_importer.ai.schemas import (
+    ExtractedField,
     ExtractionVerification,
     InvoiceExtraction,
     KassenRuckmeldungExtraction,
     PkvAntwortExtraction,
+    VerificationStatus,
     VisionPageExtraction,
     VisionValueVerification,
 )
@@ -20,6 +25,9 @@ from health_importer.ai.schemas import (
 
 class ExtractionError(RuntimeError):
     """Raised when local text extraction cannot produce valid schema JSON."""
+
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 def extract_invoice_from_text(
@@ -143,6 +151,40 @@ def extract_pkv_antwort_from_text(
     raise ExtractionError(f"Pkv extraction failed: {last_error}") from last_error
 
 
+def _vision_json(
+    client: OllamaVisionClient,
+    image_paths: list[Path],
+    prompt: str,
+    schema_model: type[_ModelT],
+    *,
+    what: str,
+    num_predict: int = 2048,
+    max_retries: int = 1,
+) -> _ModelT:
+    """Ask for JSON without a grammar, validate it, and re-ask once if invalid.
+
+    The vision client sends no `format` schema (see ollama_client), so nothing
+    guarantees well-formed JSON any more -- this loop replaces that guarantee,
+    the same way extract_invoice_from_text does for the text path.
+    """
+    last_error: Exception | None = None
+    current = prompt
+    for attempt in range(max_retries + 1):
+        response = client.chat_with_images(image_paths, current, num_predict=num_predict)
+        try:
+            return schema_model.model_validate(_loads_json_object(response))
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            last_error = exc
+            current = (
+                f"{prompt}\n\nDeine vorherige Antwort war kein valides JSON nach Schema.\n"
+                f"Fehler: {exc}\n\nVorherige Antwort:\n{response}\n\n"
+                "Antworte jetzt ausschließlich mit korrigiertem JSON."
+            )
+            if attempt >= max_retries:
+                break
+    raise ExtractionError(f"{what} failed: {last_error}") from last_error
+
+
 def extract_kassen_ruckmeldung_from_vision_pages(
     images: list[tuple[int, Path]],
     *,
@@ -153,16 +195,13 @@ def extract_kassen_ruckmeldung_from_vision_pages(
     prompt = load_prompt("extract_kassen_ruckmeldung_vision.md")
     image_paths = [image_path for _page_number, image_path in images]
     client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
-    response = client.chat_with_images(
+    return _vision_json(
+        client,
         image_paths,
         prompt,
-        response_format=KassenRuckmeldungExtraction.model_json_schema(),
-        num_predict=2048,
+        KassenRuckmeldungExtraction,
+        what="Kassen vision extraction",
     )
-    try:
-        return KassenRuckmeldungExtraction.model_validate(_loads_json_object(response))
-    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-        raise ExtractionError(f"Kassen vision extraction failed: {exc}") from exc
 
 
 def extract_pkv_antwort_from_vision_pages(
@@ -175,16 +214,80 @@ def extract_pkv_antwort_from_vision_pages(
     prompt = load_prompt("extract_pkv_antwort_vision.md")
     image_paths = [image_path for _page_number, image_path in images]
     client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
-    response = client.chat_with_images(
+    return _vision_json(
+        client,
         image_paths,
         prompt,
-        response_format=PkvAntwortExtraction.model_json_schema(),
-        num_predict=2048,
+        PkvAntwortExtraction,
+        what="Pkv vision extraction",
     )
+
+
+# Der Anschriftenblock einer Honorarnote wird vom Modell auf der vollen Seite
+# regelmaessig mit dem Briefkopf verwechselt (es nennt dann den Arzt als
+# Empfaenger). Auf den oberen 35 % allein liest es ihn zuverlaessig.
+PATIENT_ADDRESS_CROP_TOP = 0.35
+# Der Fallback liest den Anschriftenblock einmal; bestaetigt ihn die Verifikation
+# unabhaengig ein zweites Mal, gilt der Name als gesichert.
+PATIENT_ADDRESS_FALLBACK_CONFIDENCE = 0.6
+PATIENT_ADDRESS_CONFIRMED_CONFIDENCE = 0.85
+
+
+def _top_crop(image_path: Path, out_dir: Path) -> Path | None:
+    """Upper part of a page render, where letterhead and addressee sit."""
     try:
-        return PkvAntwortExtraction.model_validate(_loads_json_object(response))
-    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-        raise ExtractionError(f"Pkv vision extraction failed: {exc}") from exc
+        with Image.open(image_path) as image:
+            image.load()
+            crop = image.convert("RGB").crop(
+                (0, 0, image.width, max(1, int(image.height * PATIENT_ADDRESS_CROP_TOP)))
+            )
+    except OSError:
+        return None
+    crop_path = out_dir / "top.png"
+    crop.save(crop_path)
+    return crop_path
+
+
+def _patient_from_address_block(
+    client: OllamaVisionClient,
+    image_path: Path,
+    page_number: int,
+    doctor_name: object,
+) -> ExtractedField | None:
+    """Second, cropped pass for the addressee when the full page yielded no patient.
+
+    Only sound where the addressee *is* the patient -- invoices, Befunde,
+    Patientenbriefe. On Kassen/PKV Bescheiden the addressee is usually the
+    policyholder, so that path deliberately does not use this.
+    """
+    with tempfile.TemporaryDirectory(prefix="health-importer-address-") as tmp:
+        crop_path = _top_crop(image_path, Path(tmp))
+        if crop_path is None:
+            return None
+        try:
+            response = client.chat_with_images(
+                [crop_path], load_prompt("extract_patient_address_vision.md"), num_predict=200
+            )
+            parsed = _loads_json_object(response)
+        except (OllamaError, json.JSONDecodeError, ValueError):
+            return None
+
+    first_name = parsed.get("first_name")
+    evidence = parsed.get("evidence")
+    if not isinstance(first_name, str) or not first_name.strip() or not evidence:
+        return None
+    first_name = first_name.strip().split()[0]
+
+    # Guard against the very confusion this pass exists to avoid.
+    if isinstance(doctor_name, str) and first_name.casefold() in doctor_name.casefold():
+        return None
+
+    return ExtractedField(
+        value=first_name,
+        confidence=PATIENT_ADDRESS_FALLBACK_CONFIDENCE,
+        evidence=str(evidence)[:200],
+        page=page_number,
+    )
 
 
 def extract_invoice_from_vision_pages(
@@ -198,13 +301,23 @@ def extract_invoice_from_vision_pages(
     client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
     results = []
     for page_number, image_path in images:
-        response = client.describe_image(
-            image_path, vision_prompt_for_page(page_number, pkv_insurer_names=pkv_insurer_names)
+        results.append(
+            _vision_json(
+                client,
+                [image_path],
+                vision_prompt_for_page(page_number, pkv_insurer_names=pkv_insurer_names),
+                VisionPageExtraction,
+                what=f"Vision extraction on page {page_number}",
+            )
         )
-        try:
-            results.append(VisionPageExtraction.model_validate(_loads_json_object(response)))
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            raise ExtractionError(f"Vision extraction failed on page {page_number}: {exc}") from exc
+
+    if results and all(page.patient_first_name.value is None for page in results):
+        page_number, image_path = images[0]
+        fallback = _patient_from_address_block(
+            client, image_path, page_number, results[0].doctor_name.value
+        )
+        if fallback is not None:
+            results[0].patient_first_name = fallback
     return results
 
 
@@ -298,15 +411,73 @@ def verify_extraction_vision(
     prompt = load_prompt("verify_extraction_vision.md")
     client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
     image_paths = [image_path for _page_number, image_path in images]
-    response = client.chat_with_images(
-        image_paths,
-        (f"{prompt}\n\nExtraktion:\n{extraction.model_dump_json(indent=2)}"),
-        response_format=ExtractionVerification.model_json_schema(),
+
+    # patient_first_name is checked separately, against the cropped address block
+    # only. Handing the crop to this call *alongside* the full page does not work:
+    # the prominent letterhead wins the model's attention either way, and it then
+    # reports a correctly extracted patient as "not visible" (measured -- it even
+    # claims the crop contains no addressee block). The same crop asked on its own
+    # is read correctly.
+    payload = extraction.model_dump(mode="json")
+    payload.pop("patient_first_name", None)
+    prompt = (
+        f"{prompt}\n\n`patient_first_name` ist nicht Teil dieser Prüfung und fehlt "
+        "deshalb absichtlich in der Extraktion. Bemängle sein Fehlen nicht."
     )
-    try:
-        return ExtractionVerification.model_validate(_loads_json_object(response))
-    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-        raise ExtractionError(f"Vision verification failed: {exc}") from exc
+    verification = _vision_json(
+        client,
+        image_paths,
+        f"{prompt}\n\nExtraktion:\n{json.dumps(payload, ensure_ascii=False, indent=2)}",
+        ExtractionVerification,
+        what="Vision verification",
+    )
+
+    issue, confirmed = _check_patient_against_address_block(
+        client, images[0][1], extraction.patient_first_name.value
+    )
+    if issue is not None:
+        verification.issues.append(issue)
+        if verification.status == VerificationStatus.VALID:
+            verification.status = VerificationStatus.NEEDS_REVIEW
+    elif confirmed and extraction.patient_first_name.confidence < (
+        PATIENT_ADDRESS_CONFIRMED_CONFIDENCE
+    ):
+        # Deliberate mutation of the argument: a name the fallback read once and
+        # this independent second read confirms is no longer a low-confidence
+        # guess. The caller writes the updated extraction back to the state.
+        extraction.patient_first_name.confidence = PATIENT_ADDRESS_CONFIRMED_CONFIDENCE
+    return verification
+
+
+def _check_patient_against_address_block(
+    client: OllamaVisionClient, image_path: Path, patient_value: object
+) -> tuple[str | None, bool]:
+    """Check the extracted patient against the address block alone.
+
+    Returns (issue, confirmed). A check that could not be carried out yields
+    (None, False) -- it must neither fabricate an issue nor confirm anything.
+    """
+    if patient_value is None:
+        return None, False
+    with tempfile.TemporaryDirectory(prefix="health-importer-verify-") as tmp:
+        crop_path = _top_crop(image_path, Path(tmp))
+        if crop_path is None:
+            return None, False
+        try:
+            answer = client.chat_with_images(
+                [crop_path],
+                "An welche Person ist dieses Dokument adressiert? Antworte nur mit "
+                "Vor- und Nachnamen, sonst nichts. Der Absender im Briefkopf zählt nicht.",
+                num_predict=60,
+            )
+        except OllamaError:
+            return None, False
+    if str(patient_value).casefold() in answer.casefold():
+        return None, True
+    return (
+        f"patient_first_name: Extrahiert '{patient_value}', der Anschriftenblock "
+        f"nennt aber '{answer.strip()[:80]}'."
+    ), False
 
 
 def verify_invoice_values_vision(
@@ -325,7 +496,8 @@ def verify_invoice_values_vision(
     prompt = load_prompt("verify_invoice_values_vision.md")
     client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
     image_paths = [image_path for _page_number, image_path in images]
-    response = client.chat_with_images(
+    return _vision_json(
+        client,
         image_paths,
         (
             f"{prompt}\n\n"
@@ -333,12 +505,9 @@ def verify_invoice_values_vision(
             f"- total_amount_eur: {amount}\n"
             f"- invoice_or_appointment_date: {target_date}\n"
         ),
-        response_format=VisionValueVerification.model_json_schema(),
+        VisionValueVerification,
+        what="Vision value verification",
     )
-    try:
-        return VisionValueVerification.model_validate(_loads_json_object(response))
-    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-        raise ExtractionError(f"Vision value verification failed: {exc}") from exc
 
 
 def _loads_json_object(text: str) -> dict:

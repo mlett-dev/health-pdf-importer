@@ -80,7 +80,7 @@ def test_compute_pkv_score_with_rechnungsnummer() -> None:
 
 def test_compute_pkv_score_ignores_rechnungsnummer_when_not_configured() -> None:
     props = {
-        "test-patient-tag-id": {"multi_select": ["Luna"]},
+        "test-patient-tag-id": {"multi_select": ["Nora"]},
         "test-amount-id": {"value": "120"},
         "test-date-id": {"date": "2026-05-08"},
         "some-title": {"text": "Kontrolle von Wachstum"},
@@ -88,7 +88,7 @@ def test_compute_pkv_score_ignores_rechnungsnummer_when_not_configured() -> None
 
     score, reasons = _compute_pkv_score(
         props,
-        "Luna",
+        "Nora",
         "120",
         date(2026, 5, 8),
         "R-2026-001",
