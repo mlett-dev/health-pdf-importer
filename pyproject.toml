@@ -28,7 +28,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=9",
-  "ruff>=0.8",
+  # Exakt gepinnt: ruff 0.16 hat die Standard-Regelauswahl stark erweitert
+  # (FURB, BLE, TRY, DTZ, PERF, SIM, PL*, UP, I). Mit "ruff>=0.8" zog die CI
+  # die neueste Version und meldete 76 Fehler, waehrend lokal alles gruen war.
+  "ruff==0.15.12",
 ]
 
 [project.scripts]
