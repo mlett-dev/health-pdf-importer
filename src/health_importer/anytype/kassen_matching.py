@@ -344,6 +344,11 @@ def _get_date_prop(props: dict, key: str) -> date | None:
         return None
 
 
+def get_invoice_date(props: dict, date_property_id: str) -> date | None:
+    """Return the Rechnungsdatum stored on a Wahlarztrechnung object."""
+    return _get_date_prop(props, date_property_id)
+
+
 def get_resolved_doctor_name(props: dict) -> str | None:
     """Return the doctor name find_invoice_candidates resolved for this object.
 

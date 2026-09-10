@@ -139,13 +139,11 @@ state_db:
 #  provider: gmx
 #  draft_folder: review/drafts
 #  pkv_recipient: pkv-service@example.invalid
-#  # Verfuegbare Platzhalter im Betreff:
-#  #   {patient}  -> Patienten-Vorname
-#  #   {date}     -> Bescheidsdatum (dd.mm.yyyy)
-#  pkv_subject_template: "Einreichung Wahlarztrechnung — {patient} — {date}"
-#  # Verfuegbare Platzhalter im Body:
+#  # Betreff und Body teilen sich dieselben Platzhalter -- nur {details}
+#  # gehoert wegen des mehrzeiligen Blocks ausschliesslich in den Body:
 #  #   {patient}                -> Patienten-Vorname
 #  #   {date}                   -> Bescheidsdatum (dd.mm.yyyy)
+#  #   {rechnungsdatum}         -> Rechnungsdatum der Honorarnote (oder "")
 #  #   {details}                -> Auto-gebauter Details-Block
 #  #   {erstattungsbetrag}      -> Erstattungsbetrag als "123,45"
 #  #   {aktenzeichen}           -> Aktenzeichen (oder "")
@@ -155,10 +153,14 @@ state_db:
 #  #   {sender_name}            -> Absender-Name
 #  #   {sender_policy_number}   -> Polizzennummer
 #  #   {recipient}              -> Pkv-Empfaenger-Mail
+#  # Das Rechnungsdatum gehoert in Betreff UND Text: sonst sehen mehrere
+#  # Einreichungen desselben Patienten bis auf den Anhang identisch aus.
+#  pkv_subject_template: "Einreichung Wahlarztrechnung — {patient} — Honorarnote {rechnungsdatum}"
 #  pkv_body_template: |
 #    Sehr geehrtes Pkv Team,
 #
-#    ich ersuche um Rueckerstattung der Arztkosten gemaess beiliegender Honorarnoten.
+#    ich ersuche um Rueckerstattung der Arztkosten gemaess beiliegender Honorarnote.
+#    Rechnungsdatum der Honorarnote: {rechnungsdatum}
 #    {details}
 #
 #    Vielen Dank im Voraus.
@@ -182,11 +184,12 @@ state_db:
 #  provider: gmail
 #  draft_folder: review/drafts
 #  pkv_recipient: pkv-service@example.invalid
-#  pkv_subject_template: "Einreichung Wahlarztrechnung — {patient} — {date}"
+#  pkv_subject_template: "Einreichung Wahlarztrechnung — {patient} — Honorarnote {rechnungsdatum}"
 #  pkv_body_template: |
 #    Sehr geehrtes Pkv Team,
 #
-#    ich ersuche um Rueckerstattung der Arztkosten gemaess beiliegender Honorarnoten.
+#    ich ersuche um Rueckerstattung der Arztkosten gemaess beiliegender Honorarnote.
+#    Rechnungsdatum der Honorarnote: {rechnungsdatum}
 #    {details}
 #
 #    Vielen Dank im Voraus.

@@ -45,8 +45,12 @@ def _build_details_block(
     rechnungsnummer: str | None,
     betreffender_termin: object,
     invoice_object_name: str | None,
+    rechnungsdatum: object = None,
 ) -> str:
     lines = [f"- Erstattungsbetrag: {_format_amount_eur(erstattungsbetrag_eur)} €"]
+    rechnungs_date = _to_date(rechnungsdatum)
+    if rechnungs_date:
+        lines.append(f"- Rechnungsdatum: {rechnungs_date.strftime('%d.%m.%Y')}")
     if aktenzeichen:
         lines.append(f"- Aktenzeichen: {aktenzeichen}")
     if rechnungsnummer:
@@ -75,12 +79,17 @@ def build_pkv_draft(
     body_template: str,
     sender_name: str = "",
     sender_policy_number: str = "",
+    rechnungsdatum: object = None,
 ) -> DraftMessage:
     """Build a Pkv submission draft email.
 
-    Available body placeholders:
+    Subject and body share the same placeholders, except {details}, whose
+    multi-line block only makes sense in the body.
+
+    Available placeholders:
         {patient}                -> patient first name
         {date}                   -> bescheids date (dd.mm.yyyy)
+        {rechnungsdatum}         -> Honorarnote invoice date (dd.mm.yyyy) or ""
         {details}                -> auto-built details block
         {erstattungsbetrag}      -> refund amount as "123,45"
         {aktenzeichen}           -> file number or ""
@@ -93,10 +102,6 @@ def build_pkv_draft(
     """
     bescheids_date = _to_date(bescheids_datum) or date.today()
     date_str = bescheids_date.strftime("%d.%m.%Y")
-    subject = subject_template.format(
-        patient=patient_first_name,
-        date=date_str,
-    )
 
     details = _build_details_block(
         erstattungsbetrag_eur=erstattungsbetrag_eur,
@@ -104,22 +109,29 @@ def build_pkv_draft(
         rechnungsnummer=rechnungsnummer,
         betreffender_termin=betreffender_termin,
         invoice_object_name=invoice_object_name,
+        rechnungsdatum=rechnungsdatum,
     )
 
     termin_date = _to_date(betreffender_termin)
-    body = body_template.format(
-        patient=patient_first_name,
-        date=date_str,
-        details=details,
-        erstattungsbetrag=_format_amount_eur(erstattungsbetrag_eur),
-        aktenzeichen=aktenzeichen or "",
-        rechnungsnummer=rechnungsnummer or "",
-        termin=termin_date.strftime("%d.%m.%Y") if termin_date else "",
-        rechnungsname=invoice_object_name or "",
-        sender_name=sender_name,
-        sender_policy_number=sender_policy_number,
-        recipient=pkv_recipient,
-    )
+    rechnungs_date = _to_date(rechnungsdatum)
+    placeholders = {
+        "patient": patient_first_name,
+        "date": date_str,
+        "rechnungsdatum": rechnungs_date.strftime("%d.%m.%Y") if rechnungs_date else "",
+        "erstattungsbetrag": _format_amount_eur(erstattungsbetrag_eur),
+        "aktenzeichen": aktenzeichen or "",
+        "rechnungsnummer": rechnungsnummer or "",
+        "termin": termin_date.strftime("%d.%m.%Y") if termin_date else "",
+        "rechnungsname": invoice_object_name or "",
+        "sender_name": sender_name,
+        "sender_policy_number": sender_policy_number,
+        "recipient": pkv_recipient,
+    }
+
+    # Without a Rechnungsdatum the subject would end in the separator the
+    # template put in front of it, so trim that off again.
+    subject = subject_template.format(**placeholders).strip(" \t\u2014-\u2013|")
+    body = body_template.format(details=details, **placeholders)
 
     attachments: list[Path] = []
     if kassen_pdf_path and kassen_pdf_path.exists():

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import re
 import traceback
+from datetime import date
 from pathlib import Path
 
 from health_importer.ai.extractors import (
@@ -10,7 +12,11 @@ from health_importer.ai.extractors import (
 )
 from health_importer.ai.schemas import KassenRuckmeldungExtraction
 from health_importer.anytype.client import build_anytype_client
-from health_importer.anytype.kassen_matching import find_invoice_candidates, score_match_candidates
+from health_importer.anytype.kassen_matching import (
+    find_invoice_candidates,
+    get_invoice_date,
+    score_match_candidates,
+)
 from health_importer.anytype.kassen_upload import upload_kassen_pdf
 from health_importer.config import KassenFileNamingConfig
 from health_importer.graph.state import (
@@ -460,6 +466,33 @@ def kassen_review_node(state: GraphState) -> GraphState:
     return next_state
 
 
+def _invoice_date_from_match(selected_match: dict | None, date_property_id: str) -> date | None:
+    """Read the Honorarnote's Rechnungsdatum out of the matched invoice object.
+
+    Manually corrected matches carry no properties, so fall back to the leading
+    date in the object name -- invoices are titled from ``file_naming.pattern``,
+    whose ``{date}`` is that very same Rechnungsdatum.
+    """
+    if not selected_match:
+        return None
+
+    props = selected_match.get("properties")
+    if isinstance(props, dict):
+        invoice_date = get_invoice_date(props, date_property_id)
+        if invoice_date:
+            return invoice_date
+
+    name = selected_match.get("name")
+    if name:
+        match = re.match(r"(\d{4})[_-](\d{2})[_-](\d{2})", str(name))
+        if match:
+            try:
+                return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+            except ValueError:
+                return None
+    return None
+
+
 def create_pkv_draft(state: GraphState) -> GraphState:
     """Create a Pkv email draft after successful Kassen update."""
     next_state = copy_state(state)
@@ -489,14 +522,18 @@ def create_pkv_draft(state: GraphState) -> GraphState:
 
     erstattungsbetrag_eur = safe_decimal(kassen_data.get("erstattungsbetrag_eur"))
 
+    anytype_config = anytype_config_from_state(state)
+
     invoice_pdf_path: Path | None = None
     invoice_file_id = selected_match.get("invoice_file_id") if selected_match else None
     if invoice_file_id:
         try:
-            client = build_anytype_client(anytype_config_from_state(state))
+            client = build_anytype_client(anytype_config)
             invoice_pdf_path = client.download_file(str(invoice_file_id))
         except Exception as exc:
             logger.warning("Failed to download invoice file %s: %s", invoice_file_id, exc)
+
+    rechnungsdatum = _invoice_date_from_match(selected_match, anytype_config.date_property_id)
 
     email_config = get_email_config(state) or {}
     draft = build_pkv_draft(
@@ -524,6 +561,7 @@ def create_pkv_draft(state: GraphState) -> GraphState:
         ),
         sender_name=email_config.get("pkv_sender_name", ""),
         sender_policy_number=email_config.get("pkv_sender_policy_number", ""),
+        rechnungsdatum=rechnungsdatum,
     )
 
     if email_config and email_config.get("enabled"):

@@ -75,3 +75,34 @@ def test_file_only_provider_creates_markdown(tmp_path: Path) -> None:
     assert "E-Mail Entwurf" in content
     assert "pkv-service@example.invalid" in content
     assert "85,00" in content
+
+
+def test_invoice_date_from_matched_object_properties() -> None:
+    """The Rechnungsdatum comes off the matched Wahlarztrechnung object."""
+    from health_importer.graph.kassen_nodes import _invoice_date_from_match
+
+    selected_match = {
+        "name": "2026_04_03_Testarzt_Anna",
+        "properties": {"test-date-id": {"date": "2026-02-11"}},
+    }
+    # The object property wins over the date in the name.
+    assert _invoice_date_from_match(selected_match, "test-date-id") == date(2026, 2, 11)
+
+    selected_match["properties"] = {"test-date-id": {"value": "2026-02-11T00:00:00Z"}}
+    assert _invoice_date_from_match(selected_match, "test-date-id") == date(2026, 2, 11)
+
+
+def test_invoice_date_falls_back_to_object_name() -> None:
+    """Manually corrected matches carry no properties, only a name."""
+    from health_importer.graph.kassen_nodes import _invoice_date_from_match
+
+    selected_match = {"name": "2026_02_11_Testarzt_Anna", "properties": {}}
+    assert _invoice_date_from_match(selected_match, "date-prop") == date(2026, 2, 11)
+
+
+def test_invoice_date_missing_stays_none() -> None:
+    """A name without a leading date yields no Rechnungsdatum rather than a wrong one."""
+    from health_importer.graph.kassen_nodes import _invoice_date_from_match
+
+    assert _invoice_date_from_match({"name": "Manuell zugeordnet"}, "date-prop") is None
+    assert _invoice_date_from_match(None, "date-prop") is None

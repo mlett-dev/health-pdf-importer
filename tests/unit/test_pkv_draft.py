@@ -175,3 +175,68 @@ def test_missing_pdf_paths_ignored() -> None:
         body_template="Body",
     )
     assert draft.attachments == []
+
+
+def test_rechnungsdatum_in_subject_and_body() -> None:
+    """The Honorarnote date distinguishes drafts that are otherwise identical."""
+    draft = build_pkv_draft(
+        patient_first_name="Anna",
+        bescheids_datum="2026-03-25",
+        erstattungsbetrag_eur=Decimal("123.45"),
+        rechnungsnummer=None,
+        aktenzeichen=None,
+        betreffender_termin=None,
+        invoice_object_name=None,
+        kassen_pdf_path=None,
+        invoice_pdf_path=None,
+        pkv_recipient="pkv-service@example.invalid",
+        subject_template="Rückerstattung der Arztkosten — Honorarnote vom {rechnungsdatum}",
+        body_template=(
+            "Sehr geehrtes Muki Team,\n\n"
+            "ich ersuche um Rückerstattung gemäß beiliegender Honorarnote "
+            "vom {rechnungsdatum}.\n\n{details}\n"
+        ),
+        rechnungsdatum="2026-02-11",
+    )
+    assert draft.subject == "Rückerstattung der Arztkosten — Honorarnote vom 11.02.2026"
+    assert "Honorarnote vom 11.02.2026." in draft.body_text
+    assert "- Rechnungsdatum: 11.02.2026" in draft.body_text
+
+
+def test_missing_rechnungsdatum_leaves_no_dangling_separator() -> None:
+    """Without an invoice date the subject must not end in its separator."""
+    draft = build_pkv_draft(
+        patient_first_name="Anna",
+        bescheids_datum="2026-03-25",
+        erstattungsbetrag_eur=Decimal("123.45"),
+        rechnungsnummer=None,
+        aktenzeichen=None,
+        betreffender_termin=None,
+        invoice_object_name=None,
+        kassen_pdf_path=None,
+        invoice_pdf_path=None,
+        pkv_recipient="pkv-service@example.invalid",
+        subject_template="Rückerstattung der Arztkosten — {rechnungsdatum}",
+        body_template="{details}\n",
+    )
+    assert draft.subject == "Rückerstattung der Arztkosten"
+    assert "Rechnungsdatum" not in draft.body_text
+
+
+def test_subject_accepts_the_full_placeholder_set() -> None:
+    """Subject and body share placeholders, so a subject may use any of them."""
+    draft = build_pkv_draft(
+        patient_first_name="Anna",
+        bescheids_datum="2026-03-25",
+        erstattungsbetrag_eur=Decimal("123.45"),
+        rechnungsnummer="R-9",
+        aktenzeichen="AZ-1",
+        betreffender_termin=date(2026, 1, 7),
+        invoice_object_name="2026_02_11_Testarzt_Anna",
+        kassen_pdf_path=None,
+        invoice_pdf_path=None,
+        pkv_recipient="pkv-service@example.invalid",
+        subject_template="{patient} {rechnungsnummer} {aktenzeichen} {termin} {rechnungsname}",
+        body_template="{details}\n",
+    )
+    assert draft.subject == "Anna R-9 AZ-1 07.01.2026 2026_02_11_Testarzt_Anna"
