@@ -12,7 +12,10 @@ dependencies = [
   "langgraph>=0.2",
   "langchain-core>=0.3",
   "langchain-ollama>=0.2",
-  "mcp>=1.0",
+  # Exakt gepinnt: mcp 2.x hat CallToolResult.isError zu .is_error umbenannt,
+  # was mcp_client.py zur Laufzeit brechen wuerde. Vor dem Anheben die
+  # Attributnamen in mcp_client.py und test_anytype_mcp_client.py umstellen.
+  "mcp==1.27.1",
   "pydantic>=2.8",
   "watchdog>=5",
   "ocrmypdf>=17",
