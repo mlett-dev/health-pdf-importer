@@ -37,10 +37,40 @@ def test_verify_extraction_can_be_disabled() -> None:
     )
 
 
-def test_verify_extraction_rejects_invalid_status(monkeypatch) -> None:
+def test_verify_extraction_repairs_invalid_status(monkeypatch) -> None:
+    # No grammar constrains the answer any more, so an invalid status is re-asked
+    # once instead of failing the run outright.
     monkeypatch.setattr(
         "health_importer.ai.extractors.OllamaTextClient",
-        _client(['{"status":"maybe","issues":[],"confidence":0.7}']),
+        _client(
+            [
+                '{"status":"maybe","issues":[],"confidence":0.7}',
+                '{"status":"valid","issues":[],"confidence":0.9}',
+            ]
+        ),
+    )
+
+    result = verify_extraction(
+        "Text",
+        _extraction(),
+        model="qwen3.6:35b-a3b-q8_0",
+        base_url="http://127.0.0.1:11434",
+        timeout_seconds=30,
+    )
+
+    assert result is not None
+    assert result.status == VerificationStatus.VALID
+
+
+def test_verify_extraction_rejects_invalid_status_after_retry(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "health_importer.ai.extractors.OllamaTextClient",
+        _client(
+            [
+                '{"status":"maybe","issues":[],"confidence":0.7}',
+                '{"status":"vielleicht","issues":[],"confidence":0.7}',
+            ]
+        ),
     )
 
     with pytest.raises(ExtractionError):

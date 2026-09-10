@@ -1,14 +1,26 @@
 """Thin HTTP client for the local Ollama API.
 
-Vision calls deliberately do not pass a `format` JSON schema. Ollama 0.33.3
-builds a GBNF grammar from it, and that grammar can terminate while the model is
-still mid-string; the next token then raises
+Neither client can pass a `format` JSON schema -- there is no parameter for it,
+so a caller cannot reintroduce one by accident. Ollama 0.33.3 builds a GBNF
+grammar from that schema, and the grammar breaks the answer in two ways.
+
+It can terminate while the model is still mid-string; the next token then raises
 ``Unexpected empty grammar stack after accepting piece: / (14)`` in the sampler.
 Ollama swallows the exception and answers HTTP 200 with empty message content,
 which reaches the caller as a bare "no message content" error. Observed on
 07.09.2026 on an invoice containing "Medizinische/Therapeutische" -- the "/" is
 ordinary text, not a think token. Callers parse the JSON out of the free-text
 answer (fenced ```json is what the model produces) and re-ask on invalid JSON.
+
+The quieter failure, measured on the text path on 10.09.2026: under the grammar
+the model simply omits optional properties. An OeGK response whose text reads
+"Behandlerin: Dr. Testarzt Zeta" came back without a `doctor_name` key at
+all, so pydantic filled the field with its null default and the model never
+listed it in `missing_fields` -- it looked like a field absent from the
+document. The identical call without the schema returned the name at confidence
+0.95. Field order deviated from the schema too, so 0.33.3 is not enforcing the
+grammar it built. A missing doctor_name capped Kassen matching at 0.857 and sent
+every OeGK response to review.
 
 `think` must stay False: with thinking enabled these models spend the whole
 num_predict budget on the thinking block and return empty content with
@@ -66,8 +78,6 @@ class OllamaVisionClient:
         self.timeout_seconds = timeout_seconds
 
     def describe_image(self, image_path: Path, prompt: str) -> str:
-        # Deliberately no response_format: see the module docstring on the
-        # grammar crash. Callers validate the JSON and repair it instead.
         return self.chat_with_images([image_path], prompt)
 
     def chat_with_images(
@@ -75,7 +85,6 @@ class OllamaVisionClient:
         images: list[Path],
         prompt: str,
         *,
-        response_format: dict | None = None,
         num_predict: int = 2048,
     ) -> str:
         payload = {
@@ -94,8 +103,6 @@ class OllamaVisionClient:
                 }
             ],
         }
-        if response_format is not None:
-            payload["format"] = response_format
         request = urllib.request.Request(
             f"{self.base_url}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
@@ -131,8 +138,6 @@ class OllamaTextClient:
         self,
         messages: list[dict[str, str]],
         *,
-        format: dict | str | None = None,
-        response_format: dict | str | None = None,
         num_predict: int = 2048,
     ) -> str:
         payload = {
@@ -145,9 +150,6 @@ class OllamaTextClient:
             },
             "messages": messages,
         }
-        schema_format = response_format if response_format is not None else format
-        if schema_format is not None:
-            payload["format"] = schema_format
         request = urllib.request.Request(
             f"{self.base_url}/api/chat",
             data=json.dumps(payload).encode("utf-8"),

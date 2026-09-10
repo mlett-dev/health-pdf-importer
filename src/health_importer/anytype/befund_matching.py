@@ -18,8 +18,8 @@ from health_importer.anytype.kassen_matching import (
     _extract_invoice_file_id,
     _get_date_prop,
     _get_patient_tags,
-    _get_string_prop,
     _normalize_for_match,
+    get_resolved_doctor_name,
 )
 
 if TYPE_CHECKING:
@@ -101,7 +101,7 @@ def _compute_befund_score(
         reasons.append(f"patient_mismatch:{patient_tags}")
 
     if doctor_name:
-        invoice_doctor = _get_string_prop(props, "doctor_name")
+        invoice_doctor = get_resolved_doctor_name(props)
         if invoice_doctor:
             ratio = (
                 fuzz.token_set_ratio(

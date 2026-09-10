@@ -104,7 +104,11 @@ def test_text_chat_calls_local_ollama_chat() -> None:
     assert text == "{}"
 
 
-def test_text_chat_sends_schema_format_and_num_predict() -> None:
+def test_text_chat_sends_no_format_schema() -> None:
+    # Same grammar that crashes the sampler mid-string also makes the model drop
+    # optional properties: an OeGK response came back without doctor_name, which
+    # capped Kassen matching at 0.857. The parameter is gone so no caller can
+    # reintroduce it; callers validate and repair the JSON instead.
     response = Mock()
     response.read.return_value = b'{"message":{"content":"{}"}}'
     response.__enter__ = Mock(return_value=response)
@@ -115,15 +119,24 @@ def test_text_chat_sends_schema_format_and_num_predict() -> None:
             base_url="http://127.0.0.1:11434",
             model="qwen3.6:35b-a3b-q8_0",
             timeout_seconds=5,
-        ).chat(
-            [{"role": "user", "content": "hi"}],
-            response_format={"type": "object"},
-            num_predict=123,
-        )
+        ).chat([{"role": "user", "content": "hi"}], num_predict=123)
 
     payload = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
-    assert payload["format"] == {"type": "object"}
+    assert "format" not in payload
+    assert payload["think"] is False
     assert payload["options"]["num_predict"] == 123
+
+
+def test_text_chat_rejects_a_format_schema_argument() -> None:
+    # The call the type checker already rejects has to fail at runtime too: this
+    # is the guard against the schema being reintroduced by a future caller.
+    client = OllamaTextClient(base_url="http://127.0.0.1:11434", model="m", timeout_seconds=5)
+
+    with pytest.raises(TypeError):
+        client.chat(
+            [{"role": "user", "content": "hi"}],
+            response_format={"type": "object"},  # pyright: ignore[reportCallIssue]
+        )
 
 
 def test_vision_images_are_downscaled_to_jpeg(tmp_path: Path) -> None:

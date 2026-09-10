@@ -166,31 +166,6 @@ def _decimal_or_none(value: object | None):
         return None
 
 
-def _get_string_prop(props: dict, key: str) -> str | None:
-    """Best-effort string extraction from Anytype properties."""
-    if key in props:
-        prop_value = props[key]
-        if isinstance(prop_value, dict):
-            value = prop_value.get("value")
-            if value is not None:
-                return str(value)
-            for sub_key in ("text", "name", "string", "title"):
-                if sub_key in prop_value and prop_value[sub_key] is not None:
-                    return str(prop_value[sub_key])
-        elif prop_value is not None:
-            return str(prop_value)
-    for prop_key, prop_value in props.items():
-        if isinstance(prop_value, dict):
-            for sub_key in ("text", "name", "string", "title"):
-                if sub_key in prop_value:
-                    val = prop_value[sub_key]
-                    if val is not None:
-                        return str(val)
-        elif isinstance(prop_value, str):
-            return prop_value
-    return None
-
-
 def _get_direct_string_prop(props: dict, key: str) -> str | None:
     prop_value = props.get(key)
     if isinstance(prop_value, dict):

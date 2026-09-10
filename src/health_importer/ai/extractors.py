@@ -30,6 +30,46 @@ class ExtractionError(RuntimeError):
 _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
+def _text_json(
+    client: OllamaTextClient,
+    messages: list[dict[str, str]],
+    schema_model: type[_ModelT],
+    *,
+    what: str,
+    max_retries: int = 1,
+) -> _ModelT:
+    """Ask for JSON without a grammar, validate it, and re-ask once if invalid.
+
+    The text client sends no `format` schema either (see ollama_client), so this
+    loop is the only thing keeping the answer well-formed -- the same repair
+    loop _vision_json runs for the vision path.
+    """
+    original_user = "\n\n".join(m["content"] for m in messages[1:])
+    last_error: Exception | None = None
+    current = messages
+    for attempt in range(max_retries + 1):
+        response = client.chat(current)
+        try:
+            return schema_model.model_validate(_loads_json_object(response))
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            last_error = exc
+            current = [
+                messages[0],
+                {
+                    "role": "user",
+                    "content": (
+                        "Die vorherige Antwort war kein valides JSON nach Schema. "
+                        "Antworte jetzt ausschließlich mit korrigiertem JSON.\n\n"
+                        f"{original_user}\n\nFehler: {exc}\n\n"
+                        f"Vorherige Antwort:\n{response}"
+                    ),
+                },
+            ]
+            if attempt >= max_retries:
+                break
+    raise ExtractionError(f"{what} failed: {last_error}") from last_error
+
+
 def extract_invoice_from_text(
     pdf_text: dict,
     *,
@@ -47,28 +87,13 @@ def extract_invoice_from_text(
         {"role": "user", "content": f"Extrahiere aus diesem Text:\n\n{text}"},
     ]
 
-    last_error: Exception | None = None
-    for attempt in range(max_retries + 1):
-        response = _chat_schema(client, messages, InvoiceExtraction.model_json_schema())
-        try:
-            return InvoiceExtraction.model_validate(_loads_json_object(response))
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            last_error = exc
-            messages = [
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        "Die vorherige Antwort war kein valides JSON nach Schema. "
-                        "Antworte jetzt ausschließlich mit korrigiertem JSON.\n\n"
-                        f"Originaltext:\n{text}\n\nFehler: {exc}\n\n"
-                        f"Vorherige Antwort:\n{response}"
-                    ),
-                },
-            ]
-            if attempt >= max_retries:
-                break
-    raise ExtractionError(f"Text extraction failed: {last_error}") from last_error
+    return _text_json(
+        client,
+        messages,
+        InvoiceExtraction,
+        what="Text extraction",
+        max_retries=max_retries,
+    )
 
 
 def extract_kassen_ruckmeldung_from_text(
@@ -87,28 +112,13 @@ def extract_kassen_ruckmeldung_from_text(
         {"role": "user", "content": f"Extrahiere aus diesem Text:\n\n{text}"},
     ]
 
-    last_error: Exception | None = None
-    for attempt in range(max_retries + 1):
-        response = _chat_schema(client, messages, KassenRuckmeldungExtraction.model_json_schema())
-        try:
-            return KassenRuckmeldungExtraction.model_validate(_loads_json_object(response))
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            last_error = exc
-            messages = [
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        "Die vorherige Antwort war kein valides JSON nach Schema. "
-                        "Antworte jetzt ausschließlich mit korrigiertem JSON.\n\n"
-                        f"Originaltext:\n{text}\n\nFehler: {exc}\n\n"
-                        f"Vorherige Antwort:\n{response}"
-                    ),
-                },
-            ]
-            if attempt >= max_retries:
-                break
-    raise ExtractionError(f"Kassen extraction failed: {last_error}") from last_error
+    return _text_json(
+        client,
+        messages,
+        KassenRuckmeldungExtraction,
+        what="Kassen extraction",
+        max_retries=max_retries,
+    )
 
 
 def extract_pkv_antwort_from_text(
@@ -127,28 +137,13 @@ def extract_pkv_antwort_from_text(
         {"role": "user", "content": f"Extrahiere aus diesem Text:\n\n{text}"},
     ]
 
-    last_error: Exception | None = None
-    for attempt in range(max_retries + 1):
-        response = _chat_schema(client, messages, PkvAntwortExtraction.model_json_schema())
-        try:
-            return PkvAntwortExtraction.model_validate(_loads_json_object(response))
-        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-            last_error = exc
-            messages = [
-                {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": (
-                        "Die vorherige Antwort war kein valides JSON nach Schema. "
-                        "Antworte jetzt ausschließlich mit korrigiertem JSON.\n\n"
-                        f"Originaltext:\n{text}\n\nFehler: {exc}\n\n"
-                        f"Vorherige Antwort:\n{response}"
-                    ),
-                },
-            ]
-            if attempt >= max_retries:
-                break
-    raise ExtractionError(f"Pkv extraction failed: {last_error}") from last_error
+    return _text_json(
+        client,
+        messages,
+        PkvAntwortExtraction,
+        what="Pkv extraction",
+        max_retries=max_retries,
+    )
 
 
 def _vision_json(
@@ -375,7 +370,7 @@ def verify_extraction(
 
     prompt = load_prompt("verify_extraction.md")
     client = OllamaTextClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
-    response = _chat_schema(
+    return _text_json(
         client,
         [
             {"role": "system", "content": prompt},
@@ -388,12 +383,9 @@ def verify_extraction(
                 ),
             },
         ],
-        ExtractionVerification.model_json_schema(),
+        ExtractionVerification,
+        what="Verification",
     )
-    try:
-        return ExtractionVerification.model_validate(_loads_json_object(response))
-    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
-        raise ExtractionError(f"Verification failed: {exc}") from exc
 
 
 def verify_extraction_vision(
@@ -518,13 +510,6 @@ def _loads_json_object(text: str) -> dict:
     if not match:
         raise ValueError("No JSON object found in model response")
     return json.loads(match.group(1))
-
-
-def _chat_schema(client: OllamaTextClient, messages: list[dict[str, str]], schema: dict) -> str:
-    try:
-        return client.chat(messages, response_format=schema)
-    except TypeError:
-        return client.chat(messages)
 
 
 _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)

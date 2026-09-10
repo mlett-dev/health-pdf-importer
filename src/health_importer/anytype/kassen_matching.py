@@ -175,15 +175,18 @@ def _compute_match_score(
 
     # Aktenzeichen (very high weight)
     if kassen.aktenzeichen:
-        doc_aktenzeichen = _get_string_prop(props, "aktenzeichen")
-        if doc_aktenzeichen and _normalize_for_match(doc_aktenzeichen) == _normalize_for_match(
-            kassen.aktenzeichen
-        ):
-            scores.append((1.5, 1.0))
-            reasons.append(f"aktenzeichen_exact:{kassen.aktenzeichen}")
+        if "aktenzeichen" not in props:
+            reasons.append("aktenzeichen_not_configured")
+        elif doc_aktenzeichen := _get_direct_string_prop(props, "aktenzeichen"):
+            if _normalize_for_match(doc_aktenzeichen) == _normalize_for_match(kassen.aktenzeichen):
+                scores.append((1.5, 1.0))
+                reasons.append(f"aktenzeichen_exact:{kassen.aktenzeichen}")
+            else:
+                scores.append((1.5, 0.0))
+                reasons.append("aktenzeichen_mismatch")
         else:
             scores.append((1.5, 0.0))
-            reasons.append("aktenzeichen_mismatch")
+            reasons.append("aktenzeichen_missing_in_invoice")
 
     # Rechnungsnummer (very high weight)
     if kassen.rechnungsnummer:
@@ -204,7 +207,7 @@ def _compute_match_score(
 
     # Arzt (medium weight)
     if kassen.doctor_name:
-        doc_doctor = _get_string_prop(props, "doctor_name")
+        doc_doctor = get_resolved_doctor_name(props)
         if doc_doctor:
             score = (
                 fuzz.token_set_ratio(
@@ -341,23 +344,18 @@ def _get_date_prop(props: dict, key: str) -> date | None:
         return None
 
 
-def _get_string_prop(props: dict, key: str) -> str | None:
-    """Best-effort string extraction from Anytype properties."""
-    if key == "doctor_name":
-        resolved = props.get("__resolved_doctor_name__")
-        if resolved:
-            return str(resolved)
-    for prop_key, prop_value in props.items():
-        if isinstance(prop_value, dict):
-            # Try common Anytype string value formats
-            for sub_key in ("text", "name", "string", "title"):
-                if sub_key in prop_value:
-                    val = prop_value[sub_key]
-                    if val is not None:
-                        return str(val)
-        elif isinstance(prop_value, str):
-            return prop_value
-    return None
+def get_resolved_doctor_name(props: dict) -> str | None:
+    """Return the doctor name find_invoice_candidates resolved for this object.
+
+    The Arzt property holds linked object IDs, so the readable name only exists
+    once _resolve_doctor_names has written it back. Returning None when it did
+    not is the honest answer -- the predecessor of this function fell back to
+    scanning every property and handing back the first one carrying a `name`
+    sub-key, which is a property label such as "GKK eingereicht", never a
+    doctor.
+    """
+    resolved = props.get("__resolved_doctor_name__")
+    return str(resolved) if resolved else None
 
 
 def _get_direct_string_prop(props: dict, key: str) -> str | None:

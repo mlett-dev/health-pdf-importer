@@ -5,7 +5,8 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from health_importer.anytype.kassen_matching import (
-    _get_string_prop,
+    _compute_match_score,
+    get_resolved_doctor_name,
     _resolve_doctor_names,
     find_invoice_candidates,
     score_match_candidates,
@@ -57,16 +58,16 @@ def test_resolve_doctor_names_without_runner_returns_empty() -> None:
     assert result == {}
 
 
-def test_get_string_prop_prefers_resolved_doctor_name() -> None:
-    """_get_string_prop returns __resolved_doctor_name__ when present."""
+def test_resolved_doctor_name_is_read_from_the_resolved_key() -> None:
     props = {"__resolved_doctor_name__": "Testarzt Alpha"}
-    assert _get_string_prop(props, "doctor_name") == "Testarzt Alpha"
+    assert get_resolved_doctor_name(props) == "Testarzt Alpha"
 
 
-def test_get_string_prop_falls_back_to_regular_props() -> None:
-    """Without __resolved_doctor_name__, scans regular properties."""
-    props = {"some_key": {"text": "hello"}}
-    assert _get_string_prop(props, "doctor_name") == "hello"
+def test_unresolved_doctor_name_is_none_not_some_other_property() -> None:
+    """The predecessor scanned every property and returned the first `name` it
+    found -- a property label like "GKK eingereicht", never a doctor."""
+    props = {"test-gkk-id": {"name": "GKK eingereicht", "value": True}}
+    assert get_resolved_doctor_name(props) is None
 
 
 def test_score_match_candidates_with_resolved_doctor_name() -> None:
@@ -176,3 +177,92 @@ def test_find_invoice_candidates_injects_resolved_doctor_names() -> None:
 
     assert len(candidates) == 1
     assert object_properties["inv-1"]["__resolved_doctor_name__"] == "Testarzt Alpha"
+
+
+def _oegk_invoice_props() -> dict:
+    """An invoice object as Anytype returns it: no aktenzeichen property at all."""
+    return {
+        "test-patient-tag-id": {
+            "format": "multi_select",
+            "name": "Patient",
+            "value": [{"name": "Nora"}],
+        },
+        "test-date-id": {"format": "date", "name": "Termin", "value": "2026-06-12T00:00:00Z"},
+        "test-amount-id": {"format": "number", "name": "Betrag (€)", "value": 160},
+        "test-gkk-id": {"format": "checkbox", "name": "GKK eingereicht", "value": True},
+        "__resolved_doctor_name__": "Testarzt Zeta",
+    }
+
+
+def _oegk_kassen(**overrides) -> ValidatedKassenRuckmeldung:
+    base = dict(
+        patient_first_name="Nora",
+        doctor_name="Dr. Testarzt Zeta",
+        bescheids_datum=date(2026, 7, 3),
+        aufwendungsbetrag_eur=Decimal("160"),
+        erstattungsbetrag_eur=Decimal("63.05"),
+        rechnungsnummer=None,
+        aktenzeichen=None,
+        betreffender_termin=date(2026, 6, 12),
+    )
+    return ValidatedKassenRuckmeldung(**{**base, **overrides})
+
+
+def _score(kassen: ValidatedKassenRuckmeldung) -> tuple[float, list[str]]:
+    return _compute_match_score(
+        _oegk_invoice_props(), kassen, "test-date-id", "test-amount-id", "test-patient-tag-id"
+    )
+
+
+def test_unconfigured_aktenzeichen_does_not_count_against_the_match() -> None:
+    # OeGK prints "Unser Zeichen", the Wahlarztrechnung type has no matching
+    # property, and the invoice cannot answer. Scoring it 0 at weight 1.5 pushed
+    # a perfect match from 1.0 down to 0.7 -- below auto_match_min, so the
+    # response went to review. Same treatment 9c6483a gave Rechnungsnummer.
+    score, reasons = _score(_oegk_kassen(aktenzeichen="6286 07 03 26"))
+
+    assert "aktenzeichen_not_configured" in reasons
+    assert score == 1.0
+
+
+def test_configured_aktenzeichen_still_has_to_match() -> None:
+    props = _oegk_invoice_props()
+    props["aktenzeichen"] = {"value": "ANDERES-AZ"}
+    score, reasons = _compute_match_score(
+        props,
+        _oegk_kassen(aktenzeichen="6286 07 03 26"),
+        "test-date-id",
+        "test-amount-id",
+        "test-patient-tag-id",
+    )
+
+    assert "aktenzeichen_mismatch" in reasons
+    assert score < 1.0
+
+
+def test_aktenzeichen_is_read_from_its_own_property_only() -> None:
+    # The scanning helper returned the "GKK eingereicht" label here and compared
+    # that against the Aktenzeichen from the response.
+    props = _oegk_invoice_props()
+    props["aktenzeichen"] = {"value": "6286 07 03 26"}
+    score, reasons = _compute_match_score(
+        props,
+        _oegk_kassen(aktenzeichen="6286 07 03 26"),
+        "test-date-id",
+        "test-amount-id",
+        "test-patient-tag-id",
+    )
+
+    assert "aktenzeichen_exact:6286 07 03 26" in reasons
+    assert score == 1.0
+
+
+def test_unresolved_doctor_link_scores_missing_not_a_random_property() -> None:
+    props = _oegk_invoice_props()
+    del props["__resolved_doctor_name__"]
+    score, reasons = _compute_match_score(
+        props, _oegk_kassen(), "test-date-id", "test-amount-id", "test-patient-tag-id"
+    )
+
+    assert "doctor_missing_in_invoice" in reasons
+    assert score < 1.0
