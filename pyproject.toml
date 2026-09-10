@@ -8,29 +8,35 @@ version = "0.1.0"
 description = "Local PDF import workflow for Wahlarzt invoices into Anytype."
 readme = "README.md"
 requires-python = ">=3.12"
+# Alle Abhaengigkeiten sind exakt gepinnt: mit offenen Untergrenzen zog die CI
+# neuere Versionen als das lokale venv und lief zweimal rot (ruff 0.16 hat die
+# Standard-Regelauswahl erweitert, mcp 2.x CallToolResult.isError umbenannt).
+# Zum Anheben: Version hier aendern, dann die CI lokal in einem frischen venv
+# nachstellen (python3 -m venv /tmp/civenv && /tmp/civenv/bin/pip install -e
+# ".[dev]") und ruff check plus pytest laufen lassen.
 dependencies = [
-  "langgraph>=0.2",
-  "langchain-core>=0.3",
-  "langchain-ollama>=0.2",
+  "langgraph==1.1.10",
+  "langchain-core==1.3.3",
+  "langchain-ollama==1.1.0",
   # Exakt gepinnt: mcp 2.x hat CallToolResult.isError zu .is_error umbenannt,
   # was mcp_client.py zur Laufzeit brechen wuerde. Vor dem Anheben die
   # Attributnamen in mcp_client.py und test_anytype_mcp_client.py umstellen.
   "mcp==1.27.1",
-  "pydantic>=2.8",
-  "watchdog>=5",
-  "ocrmypdf>=17",
-  "PyMuPDF>=1.24",
-  "Pillow>=10",
-  "pypdf>=5",
-  "PyYAML>=6",
-  "python-dateutil>=2.9",
-  "rapidfuzz>=3.9",
-  "imapclient>=3.0",
+  "pydantic==2.13.4",
+  "watchdog==6.0.0",
+  "ocrmypdf==17.4.2",
+  "PyMuPDF==1.27.2.3",
+  "Pillow==12.2.0",
+  "pypdf==6.11.0",
+  "PyYAML==6.0.3",
+  "python-dateutil==2.9.0.post0",
+  "rapidfuzz==3.14.5",
+  "imapclient==3.1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=9",
+  "pytest==9.0.3",
   # Exakt gepinnt: ruff 0.16 hat die Standard-Regelauswahl stark erweitert
   # (FURB, BLE, TRY, DTZ, PERF, SIM, PL*, UP, I). Mit "ruff>=0.8" zog die CI
   # die neueste Version und meldete 76 Fehler, waehrend lokal alles gruen war.
