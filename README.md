@@ -5,7 +5,7 @@ responses, and private insurance submission documents into Anytype.
 
 The project is designed for documents that may contain sensitive health data.
 By default, processing stays on your machine: PDF text extraction, OCR fallback,
-local LLM inference through Ollama, and optional Anytype updates through local
+local LLM inference through llama.cpp, and optional Anytype updates through local
 MCP servers.
 
 ## Features
@@ -68,7 +68,7 @@ write sidecars, and route files to `done/` or `review/`.
 | Current state | Handles the recurring document types in day-to-day personal use. Unfamiliar or low-confidence cases go to manual review |
 | Hands-on effort | Reduced from about 30 min to about 1 min per document |
 | Unattended pipeline time | About 3 min per document end to end |
-| Local model | `qwen3.6:35b-a3b-q8_0` via Ollama (text and vision) |
+| Local model | `qwen3.8:27b` on llama.cpp (Vulkan), text and vision; until November 2026 `qwen3.6:35b-a3b-q8_0` via Ollama |
 | Privacy default | No external LLM or OCR APIs by default. Everything runs locally |
 
 ## Installation
@@ -76,8 +76,8 @@ write sidecars, and route files to `done/` or `review/`.
 ### Requirements
 
 - Python >= 3.12
-- [Ollama](https://ollama.com/) running locally, by default at
-  `http://127.0.0.1:11434`
+- A local [llama.cpp](https://github.com/ggml-org/llama.cpp) server with an
+  OpenAI-compatible API (see [Local LLM](#local-llm-llamacpp))
 - Optional for productive mode: Anytype Desktop with MCP enabled
 - Optional for email drafts: an IMAP account
 
@@ -94,7 +94,7 @@ health-importer doctor
 health-importer config-check
 ```
 
-`doctor` checks runtime dependencies such as Ollama, PDF tooling, and state DB
+`doctor` checks runtime dependencies such as the LLM server, PDF tooling, and state DB
 write access. `config-check` validates the YAML structure and warns about
 productive settings.
 
@@ -159,16 +159,36 @@ Productive imports create or update objects in an Anytype space. You need:
 Use [`config/app.example.yaml`](config/app.example.yaml) as the template.
 Never commit your real `config/app.yaml`; it is ignored by `.gitignore`.
 
-## Ollama Models
+## Local LLM (llama.cpp)
 
-The example configuration defaults to:
+The importer talks to a local [llama.cpp](https://github.com/ggml-org/llama.cpp)
+server (`llama-server`, optionally behind
+[llama-swap](https://github.com/mostlygeek/llama-swap) to serve several models)
+through its OpenAI-compatible `/v1/chat/completions` API. Thinking is switched
+off per request with `chat_template_kwargs.enable_thinking`, a llama.cpp
+extension, so Ollama's OpenAI-compatible endpoint is not a drop-in replacement.
+The settings keep the historical section name `ollama:`:
 
-- `text_model`: `qwen3.6:35b-a3b-q8_0`
-- `vision_model`: `qwen3.6:35b-a3b-q8_0`
+- `base_url`: the server, e.g. `http://127.0.0.1:8080` (llama-server's default)
+- `text_model`, `vision_model`: the model IDs the server lists under
+  `/v1/models`; the vision model needs its multimodal projector (`--mmproj`)
 
-You can change these in `config/app.yaml`. The importer assumes a local Ollama
-instance at `http://127.0.0.1:11434`. In dry-run mode, LLM calls are skipped or
-mocked for initial fixture testing.
+`doctor` checks that both models are served. In dry-run mode, LLM calls are
+skipped or mocked for initial fixture testing.
+
+**AMD GPUs (ROCm/HIP) and hybrid Qwen models.** The HIP backend can carry the
+state of hybrid Gated-DeltaNet models (qwen3.5/3.6/3.8) from one request into
+the next, so an answer may quote an earlier, unrelated prompt
+([ollama#18528](https://github.com/ollama/ollama/issues/18528),
+[llama.cpp#29092](https://github.com/ggml-org/llama.cpp/issues/29092)). On such
+hardware, use a llama.cpp build with the Vulkan backend and give the importer
+its own server instance. The importer refuses answers that contain tool-call
+markup (it never sends tools) and reports them as
+`OllamaContaminatedResponseError`. To check a backend, run the upstream probe
+`rc3/leak_probe2.py` from
+[gdn-hip-leak-repro](https://github.com/jgoellermaximus/gdn-hip-leak-repro)
+against a HIP build (should report a leak, the positive control) and against
+the Vulkan build you use (should not).
 
 ## Tests and CI
 
@@ -186,7 +206,7 @@ CI runs `ruff check` and `pytest` on every push.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `config-check` warns about placeholders | Anytype IDs still use `<your-...>` values | Expected in dry-run mode. Replace them before productive use. |
-| `doctor` reports Ollama as unreachable | Ollama is not running or uses another URL | Start Ollama or adjust `ollama.base_url`. |
+| `doctor` reports the LLM server as unreachable or a model as not served | llama-server is not running, uses another URL, or lists the model under another ID | Start the server, adjust `ollama.base_url`, or set the model ID shown under `/v1/models`. |
 | A PDF lands in `review/` instead of `done/` | Low confidence, missing fields, or ambiguous patient/provider | Inspect the sidecar JSON and run `show <file-id>`. |
 | `run-once --no-dry-run` fails on Anytype | MCP is not running, identifiers are wrong, or `ANYTYPE_API_KEY` is missing | Check `doctor` output and Anytype MCP status. |
 | Sidecar contains no extracted fields | PDF has no selectable text and OCR fallback is disabled or broken | Check `pdf.min_text_chars` and OCR dependencies. |

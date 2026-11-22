@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import pytest
@@ -200,10 +201,7 @@ def test_external_ollama_url_requires_explicit_privacy_opt_in(tmp_path: Path) ->
     config_path = tmp_path / "app.yaml"
     config_text = Path("config/app.example.yaml").read_text(encoding="utf-8")
     config_path.write_text(
-        _replace_placeholders(config_text).replace(
-            "base_url: http://127.0.0.1:11434",
-            "base_url: https://ollama.example.test",
-        ),
+        _with_external_llm_url(_replace_placeholders(config_text)),
         encoding="utf-8",
     )
 
@@ -215,12 +213,7 @@ def test_external_ollama_url_can_be_explicitly_allowed(tmp_path: Path) -> None:
     config_path = tmp_path / "app.yaml"
     config_text = Path("config/app.example.yaml").read_text(encoding="utf-8")
     config_path.write_text(
-        _replace_placeholders(config_text)
-        .replace(
-            "base_url: http://127.0.0.1:11434",
-            "base_url: https://ollama.example.test",
-        )
-        .replace(
+        _with_external_llm_url(_replace_placeholders(config_text)).replace(
             "allow_external_services: false",
             "allow_external_services: true",
         ),
@@ -263,3 +256,16 @@ def test_run_once_rejects_external_ollama_url_without_opt_in(tmp_path: Path) -> 
 
     with pytest.raises(ConfigError, match="ollama_base_url"):
         run_once(pdf_path, ollama_base_url="https://ollama.example.test")
+
+
+def _with_external_llm_url(config_text: str) -> str:
+    """Point the LLM base_url at an external host, whatever the example uses."""
+    changed, count = re.subn(
+        r"^(ollama:\n(?:[ \t]+#.*\n)*[ \t]+base_url:) \S+$",
+        r"\1 https://llm.example.test",
+        config_text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    assert count == 1, "ollama.base_url not found in config/app.example.yaml"
+    return changed

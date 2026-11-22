@@ -51,7 +51,7 @@ writing to Anytype.
    health-importer doctor
    ```
 
-   This checks Ollama reachability, PDF tooling, and write access to the
+   This checks that the LLM server serves the configured models, PDF tooling, and write access to the
    configured folders.
 
 4. **Process a fixture PDF**
@@ -93,7 +93,7 @@ writing to Anytype.
 - [ ] `ANYTYPE_API_KEY` is set in the process environment or `.env`.
 - [ ] The Anytype MCP server is running and reachable.
 - [ ] `privacy.allow_external_services` is explicitly set to `true` only if
-      non-local Ollama URLs or email providers are intentionally used.
+      non-local LLM server URLs or email providers are intentionally used.
 - [ ] `email.enabled` is `true` only if IMAP draft creation is intended.
 - [ ] `config-check` completes without blocking errors.
 - [ ] `doctor` reports required dependencies as available.
@@ -155,16 +155,17 @@ Sidecar JSON files are written next to PDFs in `processing/`, `review/`,
 Full-text sidecars are disabled by default. They require explicit opt-in through
 `privacy.store_full_text_debug` and `logging.level = TRACE`.
 
-## Ollama and Local Services
+## Local LLM and Services
 
-The importer uses locally running Ollama models for extraction and
-classification. The example configuration uses:
+The importer uses a locally running llama.cpp server (OpenAI-compatible API)
+for extraction and classification; see the README section "Local LLM". The
+example configuration uses:
 
 ```yaml
 ollama:
-  base_url: http://127.0.0.1:11434
-  text_model: qwen3.6:35b-a3b-q8_0
-  vision_model: qwen3.6:35b-a3b-q8_0
+  base_url: http://127.0.0.1:8080
+  text_model: qwen3.8:27b
+  vision_model: qwen3.8:27b
   timeout_seconds: 300
 ```
 
@@ -175,7 +176,7 @@ so no model download is required for initial testing.
 
 | Problem | Diagnosis | Fix |
 |---|---|---|
-| Watcher does not start | Run `doctor` | Check Ollama, folders, and permissions. |
+| Watcher does not start | Run `doctor` | Check the LLM server, folders, and permissions. |
 | Files stay in `inbox/` | Try `scan-inbox` manually | Increase `--wait-seconds` or check file locks. |
 | `state.sqlite` grows quickly | Review old entries | Back up the DB, then consider SQLite vacuuming. |
 | Anytype updates are slow | Check MCP status | Restart Anytype Desktop and verify the base URL. |

@@ -18,9 +18,12 @@ file_naming:
   max_topic_length: 60
 
 ollama:
-  base_url: http://127.0.0.1:11434
-  text_model: qwen3.6:35b-a3b-q8_0
-  vision_model: qwen3.6:35b-a3b-q8_0
+  # Local llama.cpp server (llama-server or llama-swap), OpenAI-compatible API.
+  # The section keeps its historical name. Model IDs as listed under /v1/models.
+  # On AMD GPUs use the Vulkan build, not ROCm/HIP (see README, Local LLM).
+  base_url: http://127.0.0.1:8080
+  text_model: qwen3.8:27b
+  vision_model: qwen3.8:27b
   timeout_seconds: 300
 
 pdf:
