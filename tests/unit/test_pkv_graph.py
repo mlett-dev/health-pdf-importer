@@ -17,6 +17,7 @@ from health_importer.graph.nodes import (
     validate_pkv_antwort_node,
 )
 from health_importer.graph.state import GraphState
+from health_importer.ai.schemas import ExtractedField, PkvAntwortExtraction
 
 
 def test_decide_pkv_match_auto() -> None:
@@ -309,14 +310,18 @@ def test_update_pkv_anytype_does_not_mark_done_when_attachment_fails() -> None:
     mark_done.assert_not_called()
 
 
-def test_extract_pkv_antwort_node(monkeypatch) -> None:
-    class FakeExtraction:
-        def model_dump(self, mode):
-            assert mode == "json"
-            return {"patient_first_name": {"value": "Max"}}
+def _pkv_extraction(patient: str) -> PkvAntwortExtraction:
+    return PkvAntwortExtraction.model_validate(
+        {
+            "document_type": {"value": "pkv_antwort", "confidence": 1.0, "evidence": "Pkv"},
+            "patient_first_name": {"value": patient, "confidence": 0.9, "evidence": patient},
+        }
+    )
 
+
+def test_extract_pkv_antwort_node(monkeypatch) -> None:
     def fake_extract(*args, **kwargs):
-        return FakeExtraction()
+        return _pkv_extraction("Max")
 
     monkeypatch.setattr(
         "health_importer.graph.pkv_nodes.extract_pkv_antwort_from_text", fake_extract
@@ -334,17 +339,15 @@ def test_extract_pkv_antwort_node(monkeypatch) -> None:
 def test_extract_pkv_antwort_node_uses_vision_when_invoice_extraction_used_vision(
     monkeypatch,
 ) -> None:
-    class FakeExtraction:
-        def model_dump(self, mode):
-            assert mode == "json"
-            return {"patient_first_name": {"value": "Anna"}}
-
     def fail_text_extract(*args, **kwargs):
         raise AssertionError("text extractor should not be used")
 
     def fake_vision_extract(images, **kwargs):
         assert images == [(1, Path("/tmp/page.png"))]
-        return FakeExtraction()
+        return _pkv_extraction("Anna")
+
+    def fake_auszahlung_extract(images, **kwargs):
+        return ExtractedField(value=162.50, confidence=0.95, evidence="Der Betrag von EUR 162,50")
 
     monkeypatch.setattr(
         "health_importer.graph.pkv_nodes.extract_pkv_antwort_from_text", fail_text_extract
@@ -352,6 +355,10 @@ def test_extract_pkv_antwort_node_uses_vision_when_invoice_extraction_used_visio
     monkeypatch.setattr(
         "health_importer.graph.pkv_nodes.extract_pkv_antwort_from_vision_pages",
         fake_vision_extract,
+    )
+    monkeypatch.setattr(
+        "health_importer.graph.pkv_nodes.extract_pkv_auszahlung_from_vision_pages",
+        fake_auszahlung_extract,
     )
     state = cast(
         GraphState,
@@ -368,6 +375,21 @@ def test_extract_pkv_antwort_node_uses_vision_when_invoice_extraction_used_visio
     assert result["status"] == "PKV_EXTRACTED"
     assert result["events"][-1]["message"] == "Extracted Pkv-Antwort data using vision."
     assert cast(Any, result)["pkv_antwort_extraction"]["patient_first_name"]["value"] == "Anna"
+    # The first read left the Auszahlung empty, so a focused second read filled it.
+    assert cast(Any, result)["pkv_antwort_extraction"]["auszahlung_eur"]["value"] == 162.50
+
+
+def test_extract_pkv_antwort_node_reads_auszahlung_from_text(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "health_importer.graph.pkv_nodes.extract_pkv_antwort_from_text",
+        lambda *args, **kwargs: _pkv_extraction("Max"),
+    )
+    text = "Auszahlung:\nDer Betrag von EUR 1.162,50 wird auf das Konto IBAN AT00 ueberwiesen."
+    state = cast(
+        GraphState, {"pdf_text": {"pages": [{"page_number": 1, "text": text}]}, "events": []}
+    )
+    result = extract_pkv_antwort(state)
+    assert cast(Any, result)["pkv_antwort_extraction"]["auszahlung_eur"]["value"] == "1.162,50"
 
 
 def test_validate_pkv_antwort_node_invalid_goes_to_failed() -> None:

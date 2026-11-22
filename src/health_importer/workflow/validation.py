@@ -352,6 +352,9 @@ def validate_pkv_antwort(
     if extraction.rechnungsnummer.value is not None:
         rechnungsnummer = str(extraction.rechnungsnummer.value).strip()
 
+    if not errors:
+        errors.extend(_pkv_single_letter_total_errors(extraction, erstattungsbetrag))
+
     if errors:
         return PkvValidationResult(ok=False, pkv=None, errors=errors, warnings=warnings)
 
@@ -370,6 +373,54 @@ def validate_pkv_antwort(
         errors=[],
         warnings=warnings,
     )
+
+
+def _pkv_single_letter_total_errors(
+    extraction: PkvAntwortExtraction,
+    erstattungsbetrag: Decimal,
+) -> list[str]:
+    """Totals on the letter that contradict a single-treatment reading.
+
+    When the model reads only the first row of a Sammelbrief, the letter
+    looks like an ordinary single answer. Its Auszahlung or the person's
+    Gesamt then still covers more than that one row, which is the only
+    trace left of the rows it skipped.
+    """
+    errors = []
+    if "auszahlung_extraction_failed" in extraction.warnings:
+        # Without the Auszahlung there is nothing left to notice skipped rows by.
+        errors.append("auszahlung_extraction_failed")
+    expected = erstattungsbetrag.quantize(Decimal("0.01"))
+    auszahlung = parse_amount_eur(extraction.auszahlung_eur.value)
+    if auszahlung is not None and auszahlung != expected:
+        errors.append(f"auszahlung_differs_from_erstattung:{auszahlung}!={expected}")
+    for summe in extraction.personen_summen:
+        gesamt = parse_amount_eur(summe.gesamt_eur)
+        if gesamt is not None and gesamt != expected:
+            errors.append(f"personen_summe_differs_from_erstattung:{gesamt}!={expected}")
+    if len(extraction.positionen) == 1:
+        position = parse_amount_eur(extraction.positionen[0].erstattungsbetrag_eur)
+        if position is not None and position != expected:
+            errors.append(f"position_differs_from_erstattung:{position}!={expected}")
+    return errors
+
+
+def parse_amount_eur(value: object) -> Decimal | None:
+    """Parse an amount to the cent, accepting German notation such as 1.234,56."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        text = str(value)
+    else:
+        text = str(value).replace("EUR", "").replace("€", "").replace(" ", "").strip()
+        if not text:
+            return None
+        if "," in text:
+            text = text.replace(".", "").replace(",", ".")
+    try:
+        return Decimal(text).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def _validate_kassen_patient(

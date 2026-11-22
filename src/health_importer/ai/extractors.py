@@ -218,6 +218,49 @@ def extract_pkv_antwort_from_vision_pages(
     )
 
 
+# The Auszahlung is the letter's grand total and the one check that catches a
+# model which silently dropped a whole insured person. Asked for as a JSON
+# field, the vision model leaves it null even on letters where it copies the
+# sentence verbatim when asked in plain words -- so it copies the sentence and
+# the amount is parsed from it here, the same way as on the text path.
+def extract_pkv_auszahlung_from_vision_pages(
+    images: list[tuple[int, Path]],
+    *,
+    model: str,
+    base_url: str,
+    timeout_seconds: int,
+) -> ExtractedField:
+    prompt = load_prompt("extract_pkv_auszahlung_vision.md")
+    image_paths = [image_path for _page_number, image_path in images]
+    client = OllamaVisionClient(base_url=base_url, model=model, timeout_seconds=timeout_seconds)
+    answer = client.chat_with_images(image_paths, prompt, num_predict=200)
+    found = find_pkv_auszahlung_in_text([(1, answer)])
+    if found is None:
+        return ExtractedField(value=None, confidence=0.0)
+    # The regex match is exact, but the page it came from is not known here.
+    return found.model_copy(update={"confidence": 0.9, "page": None})
+
+
+_AUSZAHLUNG_RE = re.compile(
+    r"Betrag\s+von\s+(?:EUR|€)\s*([0-9][0-9.]*[.,][0-9]{2})\s+wird\b[^.]*?\S*berwiesen",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def find_pkv_auszahlung_in_text(pages: list[tuple[int, str]]) -> ExtractedField | None:
+    """Read the Auszahlung sentence from embedded text; None if it is not there."""
+    for page_number, text in pages:
+        match = _AUSZAHLUNG_RE.search(text)
+        if match:
+            return ExtractedField(
+                value=match.group(1),
+                confidence=0.95,
+                evidence=" ".join(match.group(0).split())[:200],
+                page=page_number,
+            )
+    return None
+
+
 # Der Anschriftenblock einer Honorarnote wird vom Modell auf der vollen Seite
 # regelmaessig mit dem Briefkopf verwechselt (es nennt dann den Arzt als
 # Empfaenger). Auf den oberen 35 % allein liest es ihn zuverlaessig.

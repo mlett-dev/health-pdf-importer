@@ -83,6 +83,13 @@ from health_importer.graph.pdf_nodes import (
     render_vision_pages_if_needed,
     run_ocr_if_needed,
 )
+from health_importer.graph.pkv_sammel_nodes import (
+    is_pkv_sammelbrief,
+    match_pkv_sammelbrief,
+    prepare_pkv_sammel_target_filename,
+    update_pkv_sammel_anytype,
+    validate_pkv_sammelbrief_node,
+)
 from health_importer.graph.state import GraphState
 
 
@@ -136,6 +143,15 @@ def build_graph():
     graph.add_node("upload_pkv_pdf", upload_pkv_pdf_node)
     graph.add_node("update_pkv_anytype", update_pkv_anytype)
     graph.add_node("move_pkv_to_done", move_pkv_to_done)
+    # Pkv Sammelbrief flow: one letter settling several invoices. The rename
+    # and upload nodes are the single-flow functions under their own names,
+    # since a node's outgoing edges are fixed.
+    graph.add_node("validate_pkv_sammelbrief", validate_pkv_sammelbrief_node)
+    graph.add_node("match_pkv_sammelbrief", match_pkv_sammelbrief)
+    graph.add_node("prepare_pkv_sammel_target_filename", prepare_pkv_sammel_target_filename)
+    graph.add_node("rename_pkv_sammel_file", rename_pkv_file)
+    graph.add_node("upload_pkv_sammel_pdf", upload_pkv_pdf_node)
+    graph.add_node("update_pkv_sammel_anytype", update_pkv_sammel_anytype)
     # Pkv review fallback (still needed for unclear matches)
     graph.add_node("mark_pkv_review", mark_pkv_review)
     graph.add_node("cleanup_vision_temp", cleanup_vision_temp)
@@ -218,7 +234,14 @@ def build_graph():
     graph.add_edge("move_befund_to_target", "mark_finished")
 
     # Pkv-Antwort flow
-    graph.add_edge("extract_pkv_antwort", "validate_pkv_antwort")
+    graph.add_conditional_edges(
+        "extract_pkv_antwort",
+        _pkv_extraction_router,
+        {
+            "single": "validate_pkv_antwort",
+            "sammel": "validate_pkv_sammelbrief",
+        },
+    )
     graph.add_edge("validate_pkv_antwort", "match_pkv_invoice")
     graph.add_conditional_edges(
         "match_pkv_invoice",
@@ -243,6 +266,22 @@ def build_graph():
     graph.add_edge("update_pkv_anytype", "move_pkv_to_done")
     graph.add_edge("move_pkv_to_done", "mark_finished")
     graph.add_edge("mark_pkv_review", "mark_finished")
+
+    # Pkv Sammelbrief flow
+    graph.add_conditional_edges(
+        "validate_pkv_sammelbrief",
+        _pkv_sammel_validation_router,
+        {"match": "match_pkv_sammelbrief", "review": "mark_pkv_review"},
+    )
+    graph.add_conditional_edges(
+        "match_pkv_sammelbrief",
+        _pkv_sammel_match_router,
+        {"auto": "prepare_pkv_sammel_target_filename", "review": "mark_pkv_review"},
+    )
+    graph.add_edge("prepare_pkv_sammel_target_filename", "rename_pkv_sammel_file")
+    graph.add_edge("rename_pkv_sammel_file", "upload_pkv_sammel_pdf")
+    graph.add_edge("upload_pkv_sammel_pdf", "update_pkv_sammel_anytype")
+    graph.add_edge("update_pkv_sammel_anytype", "move_pkv_to_done")
 
     graph.add_edge("mark_finished", "cleanup_vision_temp")
     graph.add_edge("cleanup_vision_temp", END)
@@ -289,3 +328,15 @@ def _pkv_status_router(state: GraphState) -> str:
     if status == "PKV_MATCHED_CORRECTED":
         return "auto"
     return "decide"
+
+
+def _pkv_extraction_router(state: GraphState) -> str:
+    return "sammel" if is_pkv_sammelbrief(state) else "single"
+
+
+def _pkv_sammel_validation_router(state: GraphState) -> str:
+    return "match" if get_status(state) == "PKV_SAMMEL_VALIDATED" else "review"
+
+
+def _pkv_sammel_match_router(state: GraphState) -> str:
+    return "auto" if get_next_route(state) == "pkv_sammel_auto_update" else "review"

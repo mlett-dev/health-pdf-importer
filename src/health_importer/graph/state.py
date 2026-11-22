@@ -89,6 +89,9 @@ class GraphState(TypedDict):
     befund_anytype_file_id: NotRequired[str]
     pkv_anytype_file_id: NotRequired[str]
     pkv_draft_path: NotRequired[str]
+    pkv_sammelbrief: NotRequired[dict]
+    pkv_sammel_matches: NotRequired[list[dict]]
+    pkv_sammel_written: NotRequired[list[str]]
     email_config: NotRequired[dict]
     review_artifact: NotRequired[dict]
     sidecar_policy: NotRequired[str]
@@ -168,6 +171,9 @@ STATE_VISION_PAGES_TEMP_DIR = "vision_pages_temp_dir"
 STATE_KASSEN_ANYTYPE_FILE_ID = "kassen_anytype_file_id"
 STATE_PKV_ANYTYPE_FILE_ID = "pkv_anytype_file_id"
 STATE_PKV_DRAFT_PATH = "pkv_draft_path"
+STATE_PKV_SAMMELBRIEF = "pkv_sammelbrief"
+STATE_PKV_SAMMEL_MATCHES = "pkv_sammel_matches"
+STATE_PKV_SAMMEL_WRITTEN = "pkv_sammel_written"
 STATE_EMAIL_CONFIG = "email_config"
 STATE_REVIEW_ARTIFACT = "review_artifact"
 STATE_SIDECAR_POLICY = "sidecar_policy"
@@ -480,6 +486,18 @@ def get_pkv_anytype_file_id(state: GraphState) -> str | None:
 
 def get_pkv_draft_path(state: GraphState) -> str | None:
     return state.get(STATE_PKV_DRAFT_PATH)
+
+
+def get_pkv_sammelbrief(state: GraphState) -> dict | None:
+    return state.get(STATE_PKV_SAMMELBRIEF)
+
+
+def get_pkv_sammel_matches(state: GraphState) -> list[dict]:
+    return list(state.get(STATE_PKV_SAMMEL_MATCHES) or [])
+
+
+def get_pkv_sammel_written(state: GraphState) -> list[str]:
+    return list(state.get(STATE_PKV_SAMMEL_WRITTEN) or [])
 
 
 def get_email_config(state: GraphState) -> dict | None:

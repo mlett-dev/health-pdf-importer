@@ -5,9 +5,13 @@ import traceback
 from pathlib import Path
 
 from health_importer.ai.extractors import (
+    ExtractionError,
     extract_pkv_antwort_from_text,
     extract_pkv_antwort_from_vision_pages,
+    extract_pkv_auszahlung_from_vision_pages,
+    find_pkv_auszahlung_in_text,
 )
+from health_importer.ai.ollama_client import OllamaError
 from health_importer.ai.schemas import PkvAntwortExtraction
 from health_importer.anytype.client import build_anytype_client
 from health_importer.anytype.kassen_matching import find_invoice_candidates
@@ -48,6 +52,8 @@ from health_importer.graph.state import (
     get_ollama_timeout_seconds,
     get_pkv_antwort_extraction,
     get_pkv_file_naming,
+    get_pkv_sammel_matches,
+    get_pkv_sammel_written,
     get_required_confidence_min,
     get_review_folder,
     get_selected_match,
@@ -66,6 +72,7 @@ from health_importer.graph.state_helpers import (
     event,
     pkv_from_dict,
     pkv_to_dict,
+    property_key_warning_events,
     source_text_dict,
 )
 from health_importer.state_db import StateDb
@@ -92,6 +99,8 @@ def extract_pkv_antwort(state: GraphState) -> GraphState:
             timeout_seconds=int(get_ollama_timeout_seconds(state)),
         )
         method = "vision"
+        if extraction.auszahlung_eur.value is None:
+            extraction = _with_vision_auszahlung(extraction, images, state)
     else:
         source_text = source_text_dict(state)
         extraction = extract_pkv_antwort_from_text(
@@ -101,6 +110,13 @@ def extract_pkv_antwort(state: GraphState) -> GraphState:
             timeout_seconds=int(get_ollama_timeout_seconds(state)),
         )
         method = "text"
+        if extraction.auszahlung_eur.value is None:
+            pages = [
+                (int(page.get("page_number", index)), str(page.get("text", "")))
+                for index, page in enumerate(source_text.get("pages", []), start=1)
+            ]
+            if found := find_pkv_auszahlung_in_text(pages):
+                extraction = extraction.model_copy(update={"auszahlung_eur": found})
 
     next_state = copy_state(state)
     next_state[STATE_PKV_ANTWORT_EXTRACTION] = extraction.model_dump(mode="json")
@@ -113,6 +129,27 @@ def extract_pkv_antwort(state: GraphState) -> GraphState:
         )
     )
     return next_state
+
+
+def _with_vision_auszahlung(
+    extraction: PkvAntwortExtraction,
+    images: list[tuple[int, Path]],
+    state: GraphState,
+) -> PkvAntwortExtraction:
+    """Fill the Auszahlung with a focused second read when the first left it empty."""
+    try:
+        auszahlung = extract_pkv_auszahlung_from_vision_pages(
+            images,
+            model=str(state.get("vision_model", get_vision_model(state))),
+            base_url=str(get_ollama_base_url(state)),
+            timeout_seconds=int(get_ollama_timeout_seconds(state)),
+        )
+    except (ExtractionError, OllamaError) as exc:
+        logger.warning("Pkv Auszahlung extraction failed: %s", exc)
+        return extraction.model_copy(
+            update={"warnings": [*extraction.warnings, "auszahlung_extraction_failed"]}
+        )
+    return extraction.model_copy(update={"auszahlung_eur": auszahlung})
 
 
 def validate_pkv_antwort_node(state: GraphState) -> GraphState:
@@ -188,6 +225,9 @@ def match_pkv_invoice(state: GraphState) -> GraphState:
     config = anytype_config_from_state(state)
     client = build_anytype_client(config)
     candidates, object_properties = find_invoice_candidates(client, pkv.patient_first_name, config)
+    next_state[STATE_EVENTS].extend(
+        property_key_warning_events("match_pkv_invoice", object_properties, config)
+    )
 
     scored = score_pkv_candidates(
         candidates,
@@ -491,6 +531,10 @@ def move_pkv_to_done(state: GraphState) -> GraphState:
             status=str(get_status(state)),
             events=get_events(state),
         )
+    sammel_matches = get_pkv_sammel_matches(state)
+    if sammel_matches:
+        sidecar_payload["matched_invoices"] = sammel_matches
+        sidecar_payload["written_object_ids"] = get_pkv_sammel_written(state)
     write_sidecar_if_policy(
         moved_path,
         sidecar_payload,

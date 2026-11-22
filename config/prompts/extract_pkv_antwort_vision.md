@@ -4,6 +4,14 @@ Antworte ausschliesslich als valides JSON nach diesem Schema:
 
 ```json
 {
+  "positionen": [
+    {"patient_first_name": null, "doctor_name": null, "aufwendungsbetrag_eur": null, "betreffender_termin": null, "erstattungsbetrag_eur": null, "confidence": 0.0, "evidence": null},
+    {"patient_first_name": null, "doctor_name": null, "aufwendungsbetrag_eur": null, "betreffender_termin": null, "erstattungsbetrag_eur": null, "confidence": 0.0, "evidence": null}
+  ],
+  "personen_summen": [
+    {"patient_first_name": null, "gesamt_eur": null}
+  ],
+  "auszahlung_eur": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
   "document_type": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
   "patient_first_name": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
   "doctor_name": {"value": null, "confidence": 0.0, "evidence": null, "page": null},
@@ -38,3 +46,13 @@ Wichtig:
 - Trenne urspruenglichen Rechnungsbetrag (`aufwendungsbetrag_eur`) und Erstattungsbetrag (`erstattungsbetrag_eur`).
 - Wenn die Antwort eine Ablehnung ist, setze `erstattungsbetrag_eur` auf `null` und fuege eine Warnung hinzu.
 - `patient_first_name` und `erstattungsbetrag_eur` sind fuer automatische Verarbeitung erforderlich.
+
+Positionen (Tabellenzeilen) - zuerst ausfuellen:
+
+- Eine Antwort kann mehrere Behandlungen und mehrere versicherte Personen enthalten (Sammelabrechnung). Lies das Dokument vollstaendig bis zur Auszahlung und lege fuer **jede** Tabellenzeile mit Behandler, Rechnungsbetrag, Behandlungsdatum und Erstattung genau einen Eintrag in `positionen` an - ueber alle Personen hinweg. Das Schema zeigt zwei Beispiel-Eintraege; es koennen weniger oder mehr sein. Gibt es nur eine Zeile, enthaelt `positionen` genau einen Eintrag.
+- `positionen[].patient_first_name` ist der Vorname aus der Ueberschrift direkt ueber dieser Zeile ("fuer die versicherte Person <Vorname> <Nachname> ..."), nicht aus dem Anschriften- oder Anredeblock. Schreibe den Vornamen buchstabengenau so ab, wie er gedruckt ist.
+- `positionen[].aufwendungsbetrag_eur` ist der Rechnungsbetrag dieser Zeile, `positionen[].erstattungsbetrag_eur` die Erstattung dieser Zeile und `positionen[].betreffender_termin` das Behandlungsdatum dieser Zeile (`YYYY-MM-DD`).
+- `positionen[].evidence` ist die wortwoertliche Zeile, z. B. `Dr. Testarzt 150,00 03.02.2026 61,25`.
+- `personen_summen` enthaelt fuer jede versicherte Person den Betrag ihrer Zeile "Gesamt". Gibt es keine solche Zeile, bleibt die Liste leer.
+- `auszahlung_eur` ist der insgesamt ueberwiesene Betrag. Er steht meist ganz unten unter der Ueberschrift "Auszahlung:" im Satz "Der Betrag von EUR 123,45 wird auf das Konto ... ueberwiesen". Trage diesen Betrag ein; `evidence` ist dieser Satz. Setze `null` nur, wenn das Dokument keinen solchen Satz enthaelt.
+- Addiere keine Betraege selbst. Bei mehreren Positionen beziehen sich die Einzelfelder oben (`patient_first_name`, `doctor_name`, `aufwendungsbetrag_eur`, `erstattungsbetrag_eur`, `betreffender_termin`) auf die erste Position.

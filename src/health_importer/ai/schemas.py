@@ -141,6 +141,29 @@ class KassenRuckmeldungExtraction(BaseModel):
         return not self.workflow_required_missing_fields()
 
 
+class PkvPositionExtraction(BaseModel):
+    """One treatment line of a Pkv-Antwort, e.g. one row of a Muki Sammelbrief.
+
+    Flat values with one shared evidence line: nested ExtractedFields per cell
+    would triple what the model has to produce for every row.
+    """
+
+    patient_first_name: str | None = None
+    doctor_name: str | None = None
+    aufwendungsbetrag_eur: str | int | float | None = None
+    betreffender_termin: str | None = None
+    erstattungsbetrag_eur: str | int | float | None = None
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence: str | None = None
+
+
+class PkvPersonSummeExtraction(BaseModel):
+    """The "Gesamt" a Pkv-Antwort states for one insured person."""
+
+    patient_first_name: str | None = None
+    gesamt_eur: str | int | float | None = None
+
+
 class PkvAntwortExtraction(BaseModel):
     document_type: DocumentTypeField
     patient_first_name: ExtractedField
@@ -162,6 +185,11 @@ class PkvAntwortExtraction(BaseModel):
     betreffender_termin: ExtractedField = Field(
         default_factory=lambda: ExtractedField(value=None, confidence=0.0)
     )
+    auszahlung_eur: ExtractedField = Field(
+        default_factory=lambda: ExtractedField(value=None, confidence=0.0)
+    )
+    positionen: list[PkvPositionExtraction] = Field(default_factory=list)
+    personen_summen: list[PkvPersonSummeExtraction] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     missing_fields: list[str] = Field(default_factory=list)
 
@@ -175,6 +203,44 @@ class PkvAntwortExtraction(BaseModel):
 
     def is_ready_for_code_validation(self) -> bool:
         return not self.workflow_required_missing_fields()
+
+    @field_validator("positionen", mode="after")
+    @classmethod
+    def _drop_empty_positionen(
+        cls, value: list[PkvPositionExtraction]
+    ) -> list[PkvPositionExtraction]:
+        # The prompt's schema shows two placeholder rows; a model copying them
+        # back unfilled must not turn a single letter into a Sammelbrief.
+        return [
+            p
+            for p in value
+            if any(
+                getattr(p, name) not in (None, "")
+                for name in (
+                    "patient_first_name",
+                    "doctor_name",
+                    "aufwendungsbetrag_eur",
+                    "betreffender_termin",
+                    "erstattungsbetrag_eur",
+                )
+            )
+        ]
+
+    def is_sammelbrief(self) -> bool:
+        """True when the letter settles more than one treatment or person.
+
+        The top-level fields then describe at most one of them (or a sum the
+        model made up), so the letter must not take the single-invoice path.
+        """
+        if len(self.positionen) > 1:
+            return True
+        names = {
+            str(name).strip().casefold()
+            for name in [p.patient_first_name for p in self.positionen]
+            + [s.patient_first_name for s in self.personen_summen]
+            if name and str(name).strip()
+        }
+        return len(names) > 1
 
 
 class VerificationStatus(StrEnum):

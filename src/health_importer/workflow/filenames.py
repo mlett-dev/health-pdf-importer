@@ -121,6 +121,37 @@ def generate_pkv_filename(
     return _generate_filename(config.pattern, values, prefix="pkv")
 
 
+def generate_pkv_sammel_filename(
+    *,
+    bescheids_datum: date | None,
+    patients: list[str],
+    auszahlung_eur: Decimal | None,
+    config: PkvFileNamingConfig,
+) -> str:
+    """Name a Sammelbrief with the configured Pkv pattern.
+
+    The pattern is written for one treatment; a Sammelbrief has several, so
+    every per-treatment placeholder gets the letter's own value instead.
+    """
+    if not config.enabled:
+        return ""
+    date_str = (
+        _slugify(bescheids_datum.strftime(config.date_format)) if bescheids_datum else ""
+    ) or "unknown_date"
+    unique_patients = list(dict.fromkeys(patients))
+    label = "Sammelabrechnung"
+    values = {
+        "date": date_str,
+        "service_date": date_str,
+        "patient": "_".join(_slugify(p) for p in unique_patients) or "Unbekannt",
+        "topic": label,
+        "doctor": label,
+        "doctor_last_name": label,
+        "total_amount_eur": _format_amount_eur(auszahlung_eur or Decimal("0")),
+    }
+    return _generate_filename(config.pattern, values, prefix="pkv")
+
+
 def generate_unique_pkv_path(
     pkv: ValidatedPkvAntwort,
     config: PkvFileNamingConfig,

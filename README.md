@@ -16,6 +16,10 @@ MCP servers.
   update reimbursement status and amounts.
 - **Private insurance submissions**: Upload documents, track submission state,
   and optionally create IMAP email drafts.
+- **Combined private insurance statements**: A statement settling several
+  treatments is attached to every matching invoice, each with its own
+  reimbursement, but only when the rows add up to the printed totals and every
+  row matches exactly one invoice; otherwise the whole statement goes to review.
 - **Privacy-first defaults**: No external LLM or OCR APIs by default; full-text
   logging is opt-in and disabled.
 - **Review workflow**: Low-confidence or ambiguous results are routed to a
