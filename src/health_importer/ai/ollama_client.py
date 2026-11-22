@@ -1,4 +1,10 @@
-"""Thin HTTP client for the local Ollama API.
+"""Thin HTTP client for the local LLM server.
+
+Since 22.11.2026 this talks to a llama.cpp server (llama-server, optionally behind
+llama-swap) through the OpenAI-compatible `/v1/chat/completions` API instead of Ollama's
+`/api/chat`. The class names keep "Ollama" so callers stay unchanged; the rules below still
+hold and were kept on purpose: no JSON schema/grammar, thinking off, temperature 0, images
+downscaled to JPEG. The history of each rule is Ollama 0.33.3's and is kept for context.
 
 Neither client can pass a `format` JSON schema -- there is no parameter for it,
 so a caller cannot reintroduce one by accident. Ollama 0.33.3 builds a GBNF
@@ -22,7 +28,8 @@ document. The identical call without the schema returned the name at confidence
 grammar it built. A missing doctor_name capped Kassen matching at 0.857 and sent
 every OeGK response to review.
 
-`think` must stay False: with thinking enabled these models spend the whole
+Thinking must stay off (`chat_template_kwargs.enable_thinking: false`; Ollama: `think: false`):
+with thinking enabled these models spend the whole
 num_predict budget on the thinking block and return empty content with
 done_reason "length" (reproduced 3/3).
 
@@ -48,13 +55,115 @@ from pathlib import Path
 from PIL import Image
 
 
-
 VISION_IMAGE_MAX_EDGE = 2000
 VISION_IMAGE_JPEG_QUALITY = 90
 
 
 class OllamaError(RuntimeError):
     """Raised when the local Ollama API cannot produce a response."""
+
+
+class OllamaContaminatedResponseError(OllamaError):
+    """The answer belongs to another request: the server leaked earlier state.
+
+    Ollama's ROCm build carries the recurrent state of hybrid Gated-DeltaNet
+    models (qwen3.8) from one request into the next (ollama/ollama#18528,
+    ggml-org/llama.cpp#29092). On 25.09.2026 an invoice extraction answered
+    with another agent's `exec` tool call. When the leaked text parses as a
+    tool call, Ollama's own parser trips over it and returns HTTP 500 with an
+    XML error. This error only covers leaks shaped like tool calls -- leaked
+    plain text arrives as an ordinary answer and cannot be told apart here.
+    The actual protection is running on a backend without the leak (a
+    dedicated Vulkan server instance); this is the tripwire.
+    """
+
+
+# The importer never sends tools, so any tool-call markup in an answer, or a
+# tool-call parse failure on the server, can only come from someone else's
+# conversation.
+_TOOL_CALL_MARKERS = ("<tool_call>", "<function=", "</parameter>")
+_TOOL_PARSE_ERROR_MARKERS = ("tool call parsing", "element <function>", "<function>")
+
+_CONTAMINATION_HINT = (
+    "The LLM server answered with content from another request (known state leak "
+    "on the ROCm backend, ollama/ollama#18528). Nothing was imported. Make sure the "
+    "importer uses its own LLM server instance on the Vulkan backend and retry the "
+    "file."
+)
+
+
+def _payload(model: str, messages: list[dict], num_predict: int) -> dict:
+    return {
+        "model": model,
+        "stream": False,
+        "temperature": 0,
+        "max_tokens": num_predict,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "messages": messages,
+    }
+
+
+def _post_chat(base_url: str, payload: dict, *, timeout_seconds: int, what: str) -> str:
+    request = urllib.request.Request(
+        f"{base_url}/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = _error_body(exc)
+        if any(marker in body for marker in _TOOL_PARSE_ERROR_MARKERS):
+            raise OllamaContaminatedResponseError(
+                f"{what}: HTTP {exc.code} {body[:200]}. {_CONTAMINATION_HINT}"
+            ) from exc
+        raise OllamaError(f"{what} failed: {exc} {body[:200]}".rstrip()) from exc
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise OllamaError(f"{what} failed: {exc}") from exc
+
+    choices = data.get("choices") if isinstance(data, dict) else None
+    choice = (
+        choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+    )
+    message = choice.get("message") or {}
+    usage = (data.get("usage") or {}) if isinstance(data, dict) else {}
+    content = message.get("content")
+    if message.get("tool_calls") or (
+        isinstance(content, str) and any(marker in content for marker in _TOOL_CALL_MARKERS)
+    ):
+        raise OllamaContaminatedResponseError(
+            f"{what}: the answer contains a tool call. {_CONTAMINATION_HINT}"
+        )
+    if not isinstance(content, str) or not content.strip():
+        raise OllamaError(
+            f"{what} did not contain message content "
+            f"(model={payload.get('model')}, finish_reason={choice.get('finish_reason')}, "
+            f"completion_tokens={usage.get('completion_tokens')}, "
+            f"prompt_tokens={usage.get('prompt_tokens')}, "
+            f"thinking={bool(message.get('reasoning_content'))}); "
+            "check the LLM server log at this timestamp for a server error"
+        )
+    return content.strip()
+
+
+def _error_body(exc: urllib.error.HTTPError) -> str:
+    """The server's error text. Ollama sent {"error": "..."} with `<` escaped as \\u003c,
+    llama.cpp sends {"error": {"message": "..."}}."""
+    try:
+        raw = exc.read().decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 - the body is diagnostics only.
+        return ""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    if isinstance(parsed, dict) and isinstance(parsed.get("error"), str):
+        return parsed["error"]
+    if isinstance(parsed, dict) and isinstance(parsed.get("error"), dict):
+        return str(parsed["error"].get("message", ""))
+    return raw
 
 
 @dataclass(frozen=True)
@@ -87,45 +196,21 @@ class OllamaVisionClient:
         *,
         num_predict: int = 2048,
     ) -> str:
-        payload = {
-            "model": self.model,
-            "stream": False,
-            "think": False,
-            "options": {
-                "temperature": 0,
-                "num_predict": num_predict,
-            },
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt,
-                    "images": [_encode_image(path) for path in images],
-                }
-            ],
-        }
-        request = urllib.request.Request(
-            f"{self.base_url}/api/chat",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        content: list[dict] = [{"type": "text", "text": prompt}]
+        content += [
+            {
+                "type": "image_url",
+                "image_url": {"url": "data:image/jpeg;base64," + _encode_image(path)},
+            }
+            for path in images
+        ]
+        payload = _payload(self.model, [{"role": "user", "content": content}], num_predict)
+        return _post_chat(
+            self.base_url,
+            payload,
+            timeout_seconds=self.timeout_seconds,
+            what="Ollama vision request",
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise OllamaError(f"Ollama vision request failed: {exc}") from exc
-
-        content = data.get("message", {}).get("content")
-        if not isinstance(content, str) or not content.strip():
-            raise OllamaError(
-                "Ollama vision response did not contain message content "
-                f"(model={self.model}, done_reason={data.get('done_reason')}, "
-                f"eval_count={data.get('eval_count')}, "
-                f"prompt_eval_count={data.get('prompt_eval_count')}, "
-                f"thinking={bool(data.get('message', {}).get('thinking'))}); "
-                "check `journalctl -u ollama` at this timestamp for a sampler exception"
-            )
-        return content.strip()
 
 
 class OllamaTextClient:
@@ -140,32 +225,10 @@ class OllamaTextClient:
         *,
         num_predict: int = 2048,
     ) -> str:
-        payload = {
-            "model": self.model,
-            "stream": False,
-            "think": False,
-            "options": {
-                "temperature": 0,
-                "num_predict": num_predict,
-            },
-            "messages": messages,
-        }
-        request = urllib.request.Request(
-            f"{self.base_url}/api/chat",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        payload = _payload(self.model, list(messages), num_predict)
+        return _post_chat(
+            self.base_url, payload, timeout_seconds=self.timeout_seconds, what="Ollama text request"
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise OllamaError(f"Ollama text request failed: {exc}") from exc
-
-        content = data.get("message", {}).get("content")
-        if not isinstance(content, str) or not content.strip():
-            raise OllamaError("Ollama text response did not contain message content")
-        return content.strip()
 
 
 def _encode_image(path: Path) -> str:
