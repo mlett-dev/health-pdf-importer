@@ -224,3 +224,29 @@ def anytype_config_from_state(state: GraphState) -> AnytypeConfig:
         extension_command=str(data.get("extension_command", "anytype-extension-mcp-wrapper")),
         dry_run=bool(get_anytype_dry_run(state)),
     )
+
+
+def property_key_warning_events(
+    node: str,
+    object_properties: dict[str, dict],
+    config: AnytypeConfig,
+) -> list[GraphEvent]:
+    """An event for the sidecar when Anytype no longer knows a configured key.
+
+    find_invoice_candidates already logs this; the event puts it into the
+    .import.json next to the reviewed PDF, which is where it gets read.
+    """
+    from health_importer.anytype.kassen_matching import missing_invoice_property_keys
+
+    missing = missing_invoice_property_keys(object_properties, config)
+    if not missing:
+        return []
+    return [
+        event(
+            node,
+            "ANYTYPE_PROPERTY_KEYS_MISSING",
+            f"{len(object_properties)} invoices fetched, but none has {missing}. "
+            "The property keys were probably renamed in Anytype; update config/app.yaml.",
+            severity="error",
+        )
+    ]

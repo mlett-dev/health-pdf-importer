@@ -48,7 +48,12 @@ from health_importer.graph.state import (
     get_state_db_path,
     get_status,
 )
-from health_importer.graph.state_helpers import anytype_config_from_state, copy_state, event
+from health_importer.graph.state_helpers import (
+    anytype_config_from_state,
+    copy_state,
+    event,
+    property_key_warning_events,
+)
 from health_importer.state_db import StateDb
 from health_importer.workflow.filenames import generate_befund_filename
 from health_importer.workflow.validation import normalize_patient_name
@@ -85,6 +90,9 @@ def match_befund_invoice(state: GraphState) -> GraphState:
 
     client = build_anytype_client(config)
     candidates, object_properties = find_invoice_candidates(client, patient, config)
+    next_state[STATE_EVENTS].extend(
+        property_key_warning_events("match_befund_invoice", object_properties, config)
+    )
     scored = score_befund_candidates(
         candidates,
         patient_first_name=patient,

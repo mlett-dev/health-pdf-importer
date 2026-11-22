@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
     from health_importer.anytype.client import AnytypeClient, AnytypeObjectRef
     from health_importer.config import AnytypeConfig
     from health_importer.workflow.validation import ValidatedKassenRuckmeldung
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,7 +73,47 @@ def find_invoice_candidates(
     sys.stderr.write(
         f"[find_invoice_candidates] Found {len(candidates)} candidates for patient={patient_first_name}\n"
     )
+    missing = missing_invoice_property_keys(object_properties, config)
+    if missing:
+        available = sorted({key for props in object_properties.values() for key in props})
+        message = (
+            f"[find_invoice_candidates] ERROR: {len(object_properties)} objects of type "
+            f"{config.custom_type_key} fetched, but none carries the configured property "
+            f"key(s) {missing}. The keys were probably renamed in Anytype; update "
+            f"config/app.yaml. Keys present: {available}"
+        )
+        sys.stderr.write(message + "\n")
+        logger.error(message)
     return candidates, object_properties
+
+
+# Every Wahlarztrechnung has these three. Sparse properties such as GKK (€)
+# are left out: their absence on all objects is a normal state, not a sign
+# that the key changed.
+_ALWAYS_PRESENT_PROPERTIES = (
+    "patient_tag_property_id",
+    "date_property_id",
+    "amount_property_id",
+)
+
+
+def missing_invoice_property_keys(
+    object_properties: dict[str, dict],
+    config: "AnytypeConfig",
+) -> list[str]:
+    """Configured keys that every invoice should carry but no fetched object has.
+
+    A renamed key does not fail any Anytype call: the property simply reads as
+    absent and every invoice silently stops being a candidate.
+    """
+    if not object_properties:
+        return []
+    missing = []
+    for attribute in _ALWAYS_PRESENT_PROPERTIES:
+        key = getattr(config, attribute)
+        if not any(key in props for props in object_properties.values()):
+            missing.append(f"{attribute}={key}")
+    return missing
 
 
 def score_match_candidates(

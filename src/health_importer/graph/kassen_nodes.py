@@ -72,6 +72,7 @@ from health_importer.graph.state_helpers import (
     anytype_config_from_state,
     copy_state,
     event,
+    property_key_warning_events,
     safe_decimal,
     source_text_dict,
 )
@@ -216,6 +217,9 @@ def match_kassen_invoice(state: GraphState) -> GraphState:
     scored = score_match_candidates(candidates, kassen, object_properties, config)
 
     next_state = copy_state(state)
+    next_state[STATE_EVENTS].extend(
+        property_key_warning_events("match_kassen_invoice", object_properties, config)
+    )
     next_state[STATE_MATCHING_CANDIDATES] = [
         {
             "object_id": c.object_ref.id,

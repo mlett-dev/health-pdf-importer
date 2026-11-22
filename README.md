@@ -186,6 +186,7 @@ CI runs `ruff check` and `pytest` on every push.
 | A PDF lands in `review/` instead of `done/` | Low confidence, missing fields, or ambiguous patient/provider | Inspect the sidecar JSON and run `show <file-id>`. |
 | `run-once --no-dry-run` fails on Anytype | MCP is not running, identifiers are wrong, or `ANYTYPE_API_KEY` is missing | Check `doctor` output and Anytype MCP status. |
 | Sidecar contains no extracted fields | PDF has no selectable text and OCR fallback is disabled or broken | Check `pdf.min_text_chars` and OCR dependencies. |
+| Every document lands in `review/` with "0 candidates" | Property keys were renamed in Anytype; the sidecar shows `ANYTYPE_PROPERTY_KEYS_MISSING` | Compare the keys with Anytype's property list and update `config/app.yaml`. |
 | Duplicate file is skipped | The SHA-256 hash already exists in `state.sqlite` | Expected behavior; use `retry <file-id>` to process again. |
 
 ## Operations and Service Deployment
