@@ -32,7 +32,7 @@ def test_doctor_reports_runtime_checks(capsys, tmp_path) -> None:
 
     with (
         patch("health_importer.commands.common.shutil.which", return_value="/usr/bin/tool"),
-        patch("health_importer.commands.common._ollama_json", side_effect=_fake_ollama_json),
+        patch("health_importer.commands.common._llm_models", side_effect=_fake_llm_models),
         patch("health_importer.commands.common.build_anytype_client") as build_anytype_client,
     ):
         build_anytype_client.return_value = DryRunAnytypeClient(_anytype_config(dry_run=True))
@@ -49,7 +49,7 @@ def test_doctor_fails_when_required_folder_is_missing(capsys, tmp_path) -> None:
 
     with (
         patch("health_importer.commands.common.shutil.which", return_value="/usr/bin/tool"),
-        patch("health_importer.commands.common._ollama_json", side_effect=_fake_ollama_json),
+        patch("health_importer.commands.common._llm_models", side_effect=_fake_llm_models),
     ):
         assert main(["--config", str(config_path), "doctor"]) == 1
 
@@ -407,10 +407,11 @@ def _fake_goldstandard_run(
     }
 
 
-def _fake_ollama_json(config, path: str, payload: dict | None = None):
-    if path == "/api/tags":
-        return {"models": []}
-    return {"capabilities": ["completion", "vision", "tools", "thinking"]}
+def _fake_llm_models(config):
+    return [
+        {"id": model, "capabilities": {"vision": True, "function_calling": True}}
+        for model in {config.ollama.text_model, config.ollama.vision_model}
+    ]
 
 
 def _anytype_config(*, dry_run: bool):
@@ -433,3 +434,26 @@ def _anytype_config(*, dry_run: bool):
         date_property_id="test-date-id",
         doctor_property_id="test-doctor-id",
     )
+
+
+def test_doctor_model_checks_use_openai_model_list() -> None:
+    from types import SimpleNamespace
+
+    from health_importer.commands.common import _check_ollama_model
+
+    config = SimpleNamespace(ollama=SimpleNamespace(base_url="http://127.0.0.1:1"))
+    listed = [
+        {"id": "unknown-caps"},
+        {"id": "text-only", "architecture": {"input_modalities": ["text"]}},
+        {"id": "seeing", "capabilities": {"vision": True}},
+    ]
+    with patch("health_importer.commands.common._llm_models", return_value=listed):
+        missing = _check_ollama_model(config, "absent", capability=None, name="text_model")
+        unreported = _check_ollama_model(config, "unknown-caps", capability="vision", name="v")
+        lacking = _check_ollama_model(config, "text-only", capability="vision", name="v")
+        seeing = _check_ollama_model(config, "seeing", capability="vision", name="v")
+
+    assert missing["ok"] is False and "not served" in missing["message"]
+    assert unreported["ok"] is True and "not reported" in unreported["message"]
+    assert lacking["ok"] is False
+    assert seeing["ok"] is True

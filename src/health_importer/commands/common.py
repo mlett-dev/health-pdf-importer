@@ -295,20 +295,41 @@ def _check_ocr_tools() -> dict:
 
 
 def _check_ollama(config) -> dict:
+    """Is the LLM server up? Uses the OpenAI-compatible model list (llama.cpp/llama-swap)."""
     try:
-        _ollama_json(config, "/api/tags")
+        _llm_models(config)
     except (OSError, ValueError) as exc:
         return {"name": "ollama", "ok": False, "message": str(exc)}
     return {"name": "ollama", "ok": True, "message": config.ollama.base_url}
 
 
 def _check_ollama_model(config, model: str, *, capability: str | None, name: str) -> dict:
+    """Is the model served, and (if the server reports it) can it take images?
+
+    llama-swap lists every configured model, loaded or not, but reports
+    capabilities only for models it has loaded before; plain llama-server
+    reports none. Missing capability data is therefore not a failure.
+    """
     try:
-        data = _ollama_json(config, "/api/show", {"model": model})
+        models = _llm_models(config)
     except (OSError, ValueError) as exc:
         return {"name": name, "ok": False, "message": str(exc), "model": model}
-    capabilities = data.get("capabilities") or []
-    has_capability = capability is None or capability in capabilities
+    entry = next((m for m in models if isinstance(m, dict) and m.get("id") == model), None)
+    if entry is None:
+        served = sorted(str(m.get("id")) for m in models if isinstance(m, dict))
+        return {
+            "name": name,
+            "ok": False,
+            "message": f"model not served; available: {served}",
+            "model": model,
+        }
+    capabilities = _model_capabilities(entry)
+    if capability is None or capabilities is None:
+        message = "model available"
+        if capability is not None:
+            message += f" ({capability} capability not reported by the server)"
+        return {"name": name, "ok": True, "message": message, "model": model}
+    has_capability = capability in capabilities
     return {
         "name": name,
         "ok": has_capability,
@@ -318,8 +339,21 @@ def _check_ollama_model(config, model: str, *, capability: str | None, name: str
             else f"model lacks required capability: {capability}"
         ),
         "model": model,
-        "capabilities": capabilities,
+        "capabilities": sorted(capabilities),
     }
+
+
+def _model_capabilities(entry: dict) -> set[str] | None:
+    """Capabilities from a /v1/models entry, or None if the server reports none."""
+    reported = entry.get("capabilities")
+    if isinstance(reported, dict):
+        return {key for key, value in reported.items() if value}
+    if isinstance(reported, list):
+        return {str(value) for value in reported}
+    modalities = (entry.get("architecture") or {}).get("input_modalities")
+    if isinstance(modalities, list):
+        return {"vision"} if "image" in modalities else set()
+    return None
 
 
 def _check_anytype_client(config) -> dict:
@@ -335,19 +369,16 @@ def _check_anytype_client(config) -> dict:
     }
 
 
-def _ollama_json(config, path: str, payload: dict | None = None) -> dict:
-    data = None if payload is None else json.dumps(payload).encode("utf-8")
+def _llm_models(config) -> list:
+    """The `data` list of the server's OpenAI-compatible GET /v1/models."""
     request = urllib.request.Request(
-        f"{config.ollama.base_url.rstrip('/')}{path}",
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="GET" if payload is None else "POST",
+        f"{config.ollama.base_url.rstrip('/')}/v1/models", method="GET"
     )
     try:
         with urllib.request.urlopen(request, timeout=3) as response:
             result = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Ollama request failed: {exc}") from exc
-    if not isinstance(result, dict):
-        raise ValueError("Ollama response was not a JSON object")
-    return result
+        raise ValueError(f"LLM server request failed: {exc}") from exc
+    if not isinstance(result, dict) or not isinstance(result.get("data"), list):
+        raise ValueError("LLM server /v1/models did not return a model list")
+    return result["data"]
